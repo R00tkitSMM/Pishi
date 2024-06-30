@@ -1,0 +1,12 @@
+{
+    "IOSurface": {
+        "start_address": "0xfffffe0009fadba0",
+        "end_address": "0xfffffe0009fdb2af"
+    },
+
+    "fuzz" : {
+        "start_address": "0xfffffe000a40e25c",
+        "end_address": "0xfffffe000a40e340"
+    }
+}
+

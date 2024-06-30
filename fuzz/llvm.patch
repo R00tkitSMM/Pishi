@@ -1,0 +1,38 @@
+diff --git a/compiler-rt/lib/fuzzer/FuzzerExtraCountersDarwin.cpp b/compiler-rt/lib/fuzzer/FuzzerExtraCountersDarwin.cpp
+index 2321ba8a3..acd2a9a3c 100644
+--- a/compiler-rt/lib/fuzzer/FuzzerExtraCountersDarwin.cpp
++++ b/compiler-rt/lib/fuzzer/FuzzerExtraCountersDarwin.cpp
+@@ -10,13 +10,29 @@
+ 
+ #include "FuzzerPlatform.h"
+ #include <cstdint>
+-
++#include <stddef.h>
+ #if LIBFUZZER_APPLE
+ 
++
++
++
++
+ namespace fuzzer {
+-uint8_t *ExtraCountersBegin() { return nullptr; }
+-uint8_t *ExtraCountersEnd() { return nullptr; }
+-void ClearExtraCounters() {}
++extern "C" char _pishi_libfuzzer_coverage[32 << 10];
++
++uint8_t *ExtraCountersBegin() { return (uint8_t *)_pishi_libfuzzer_coverage; }
++uint8_t *ExtraCountersEnd() { return ((uint8_t *) _pishi_libfuzzer_coverage) + sizeof(_pishi_libfuzzer_coverage); }
++
++void ClearExtraCounters() 
++{
++    uintptr_t *Beg = reinterpret_cast<uintptr_t*>(ExtraCountersBegin());
++    uintptr_t *End = reinterpret_cast<uintptr_t*>(ExtraCountersEnd());
++    for (; Beg < End; Beg++) {
++    *Beg = 0;
++    __asm__ __volatile__("" : : : "memory");
++  }
++
+ } // namespace fuzzer
++}
+ 
+ #endif
