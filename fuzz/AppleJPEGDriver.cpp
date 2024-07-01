@@ -20,12 +20,12 @@ build:
 #include <time.h>
 
 #define DEVICE_NAME "/dev/pishi"
-#define PISHI_IOC_MAP _IOWR('K', 8, struct pishi_buf_desc)
-#define PISHI_IOC_START _IOW('K', 10, uintptr_t)
-#define PISHI_IOC_STOP _IOW('K', 20, uint64_t)
-#define PISHI_IOC_UNMAP _IOW('K', 30, uint64_t)
-#define PISHI_IOC_TEST _IOW('K', 40, uintptr_t)
-#define PISHI_IOC_FUZZ _IOW('K', 50, char *)
+#define PISHI_IOCTL_MAP   _IOWR('K', 8, struct pishi_buf_desc)
+#define PISHI_IOCTL_START _IOW('K', 10, uintptr_t)
+#define PISHI_IOCTL_STOP  _IOW('K', 20, uint64_t)
+#define PISHI_IOCTL_UNMAP _IOW('K', 30, uint64_t)
+#define PISHI_IOCTL_TEST  _IOW('K', 40, uintptr_t)
+#define PISHI_IOCTL_FUZZ  _IOW('K', 50, char *)
 
 struct pishi_buf_desc
 {
@@ -46,9 +46,9 @@ char _pishi_libfuzzer_coverage[32 << 10];
 void kcov_start()
 {
   int a;
-  if (ioctl(covfd, PISHI_IOC_START, &a) == -1)
+  if (ioctl(covfd, PISHI_IOCTL_START, &a) == -1)
   {
-    perror("Failed to perform ioctl PISHI_IOC_START");
+    perror("Failed to perform ioctl PISHI_IOCTL_START");
     close(covfd);
     exit(0);
   }
@@ -68,9 +68,9 @@ void kcov_collect()
 void kcov_stop()
 {
   uint64_t data_to_send = 12345; // Example data to send
-  if (ioctl(covfd, PISHI_IOC_STOP, &data_to_send) == -1)
+  if (ioctl(covfd, PISHI_IOCTL_STOP, &data_to_send) == -1)
   {
-    perror("Failed to perform ioctl PISHI_IOC_STOP");
+    perror("Failed to perform ioctl PISHI_IOCTL_STOP");
     exit(0);
     close(covfd);
   }
@@ -93,9 +93,9 @@ extern "C" int LLVMFuzzerInitialize(int *argc, char ***argv)
   }
 
   // Perform the ioctl operation
-  if (ioctl(covfd, PISHI_IOC_MAP, &mc) == -1)
+  if (ioctl(covfd, PISHI_IOCTL_MAP, &mc) == -1)
   {
-    perror("Failed to perform ioctl PISHI_IOC_MAP");
+    perror("Failed to perform ioctl PISHI_IOCTL_MAP");
     exit(0);
     close(covfd);
     return EXIT_FAILURE;
