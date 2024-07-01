@@ -16,6 +16,9 @@ from ghidra.util.task import ConsoleTaskMonitor
 from ghidra.app.script import GhidraScript
 from ghidra.program.model.address import Address
 from ghidra.program.model.listing import CodeUnit
+from ghidra.program.model.listing import Listing
+from ghidra.program.flatapi import FlatProgramAPI
+from ghidra.program.model.mem import MemoryBlock
 
 push_regs = """nop
 sub sp,sp,#+0x100
@@ -301,15 +304,41 @@ def get_config(kext):
     
     return data[kext]
 
+def get_kext():
+    program = currentProgram
+    listing = program.getListing()
+    memory = program.getMemory()
+     
+    # Check if the file is Mach-O
+    if not "Mach-O" in program.getExecutableFormat():
+        print("This script only works with Mach-O files.")
+        return [None, None]
+
+    kext = askString("Which Kext should we use for instrumentation?", "Please enter kext name(e.g com.apple.iokit.IOSurface). if you want to instrument address range( e.g a function) use config.json")
+
+    blocks = memory.getBlocks()
+    for block in blocks:
+        if block.sourceName == kext:
+            if "__text" in block.getName():
+                print(" Start: {}".format(block.getStart()))
+                print(" End: {}".format(block.getEnd()))
+                print(" Size: {}".format(block.getSize()))
+                print(" sourceName: {}".format(block.sourceName))
+                return [str(block.getStart()), str(block.getEnd())]
+        
+    return [None, None]
+
 def main():
 
     global current_address
     stub_gen = Instruction()
     assembler = Assemblers.getAssembler(currentProgram) # type: ignore
 
-    kext = get_config('fuzz') # TODO: get section range from file not config file.
-    start_address = str(kext["start_address"])
-    end_address = str(kext["end_address"])
+    start_address, end_address = get_kext()
+    if start_address == None or end_address == None:
+        kext = get_config('instrument_range') # TODO: get section range from file not config file.
+        start_address = str(kext["start_address"])
+        end_address = str(kext["end_address"])
 
     print("start_address {}".format(start_address))
     print("end_address {}".format(end_address))
