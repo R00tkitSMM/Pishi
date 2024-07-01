@@ -76,7 +76,7 @@ bool do_instrument = false;
 uint64_t instrumented_thread = 0;
 IOMemoryMap *currnet_task_map;
 IOBufferMemoryDescriptor *memoryDescriptor;
-volatile bool do_log = true;
+volatile bool do_log = false;
 static int dev_major;
 
 
@@ -323,22 +323,18 @@ kern_return_t Pishi_start(kmod_info_t * ki, void *d)
 
 void sanitizer_cov_trace_pc(uint64_t address) {
     
-    // __probable
-    if (do_instrument)
+    if (__improbable(do_instrument == true))
     {
         my_printf("[meysam:after do_instrument] instrumented_thread %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
         
-        // un__probable
-        if (buffer_instrument == NULL)
+        if (__improbable(buffer_instrument == NULL))
             return;
         
-        // un__probable
-        if(instrumented_thread == thread_tid(current_thread()))
+        if(__improbable(instrumented_thread == thread_tid(current_thread())))
         {
             kcov* area = (kcov*) buffer_instrument;
             /* The first 64-bit word is the number of subsequent PCs. */
-            // un__probable
-            if (area->kcov_pos < 0x20000) {
+            if (__probable(area->kcov_pos < 0x20000)) {
                 unsigned long pos = area->kcov_pos;
                 area->kcov_area[pos] = address;
                 area->kcov_pos +=1;
