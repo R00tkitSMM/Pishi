@@ -19,83 +19,6 @@ from ghidra.program.model.mem import MemoryBlock
 
 INSTRUCTION_SIZE = 4
 
-push_regs = """nop
-sub sp,sp,#+0x100
-str xzr,[sp,#+0xf8]
-str x29,[sp,#+0xe8]
-str x28,[sp,#+0xe0]
-str x27,[sp,#+0xd8]
-str x26,[sp,#+0xd0]
-str x25,[sp,#+0xc8]
-str x24,[sp,#+0xc0]
-str x23,[sp,#+0xb8]
-str x22,[sp,#+0xb0]
-str x21,[sp,#+0xa8]
-str x20,[sp,#+0xa0]
-str x19,[sp,#+0x98]
-str x18,[sp,#+0x90]
-str x17,[sp,#+0x88]
-str x16,[sp,#+0x80]
-str x15,[sp,#+0x78]
-str x14,[sp,#+0x70]
-str x13,[sp,#+0x68]
-str x12,[sp,#+0x60]
-str x11,[sp,#+0x58]
-str x10,[sp,#+0x50]
-str x9,[sp,#+0x48]
-str x8,[sp,#+0x40]
-str x7,[sp,#+0x38]
-str x6,[sp,#+0x30]
-str x5,[sp,#+0x28]
-str x4,[sp,#+0x20]
-str x3,[sp,#+0x18]
-str x2,[sp,#+0x10]
-str x1,[sp,#+0x8]
-str x0,[sp]
-sub sp, sp,#+0x50
-ret"""
-
-pop_regs= """nop
-add sp, sp, #0x50
-ldr xzr,[sp, #0xf8]
-ldr x29,[sp, #0xe8]
-ldr x28,[sp, #0xe0]
-ldr x27,[sp, #0xd8]
-ldr x26,[sp, #0xd0]
-ldr x25,[sp, #0xc8]
-ldr x24,[sp, #0xc0]
-ldr x23,[sp, #0xb8]
-ldr x22,[sp, #0xb0]
-ldr x21,[sp, #0xa8]
-ldr x20,[sp, #0xa0]
-ldr x19,[sp, #0x98]
-ldr x18,[sp, #0x90]
-ldr x17,[sp, #0x88]
-ldr x16,[sp, #0x80]
-ldr x15,[sp, #0x78]
-ldr x14,[sp, #0x70]
-ldr x13,[sp, #0x68]
-ldr x12,[sp, #0x60]
-ldr x11,[sp, #0x58]
-ldr x10,[sp, #0x50]
-ldr x9,[sp, #0x48]
-ldr x8,[sp, #0x40]
-ldr x7,[sp, #0x38]
-ldr x6,[sp, #0x30]
-ldr x5,[sp, #0x28]
-ldr x4,[sp, #0x20]
-ldr x3,[sp, #0x18]
-ldr x2,[sp, #0x10]
-ldr x1,[sp, #0x8]
-ldr x0,[sp]
-add sp, sp, #0x100
-ret"""
-
-def assemble_opcode_list(assembler, address, opcodes):
-     asmcode = opcodes.splitlines()
-     assembler.assemble(address, asmcode)
-     return address.add(len(asmcode) * INSTRUCTION_SIZE) # size of each inst 
-
 def generate_assembly_instructions(x64_number):
     if not isinstance(x64_number, str) or len(x64_number) > 16:
         raise ValueError("Input must be a 64-bit hexadecimal number as a string, e.g., 'fffffffffffffffe'")
@@ -279,7 +202,7 @@ def get_config(kext):
         data = json.load(file)
     return data[kext]
 
-def get_kext():
+def get_kext(kext):
     program = currentProgram
     listing = program.getListing()
     memory = program.getMemory()
@@ -288,8 +211,6 @@ def get_kext():
     if not "Mach-O" in program.getExecutableFormat():
         print("This script only works with Mach-O files.")
         return [None, None]
-
-    kext = askString("Which Kext should we use for instrumentation?", "Please enter kext name(e.g com.apple.iokit.IOSurface). if you want to instrument address range( e.g a function) use config.json")
 
     blocks = memory.getBlocks()
     for block in blocks:
@@ -309,7 +230,9 @@ def main():
     stub_gen = Instruction()
     assembler = Assemblers.getAssembler(currentProgram) # type: ignore
 
-    start_address, end_address = get_kext()
+    kext = askString("Which Kext should we use for instrumentation?", "Please enter kext name(e.g com.apple.iokit.IOSurface). if you want to instrument address range( e.g a function) use config.json")
+
+    start_address, end_address = get_kext(kext)
     if start_address == None or end_address == None:
         kext = get_config('instrument_range')
         start_address = str(kext["start_address"])
@@ -317,17 +240,6 @@ def main():
 
     print("start_address {}".format(start_address))
     print("end_address {}".format(end_address))
-
-    push_regs_address = getGlobalFunctions("_push_regs")[0].getEntryPoint()# type: ignore
-    if not push_regs_address:
-        print("Could not find push_regs_address")
-    
-    pop_regs_address = getGlobalFunctions("_pop_regs")[0].getEntryPoint() # type: ignore
-    if not pop_regs_address:
-        print("Could not find pop_regs_address.")
-
-    assemble_opcode_list(assembler, push_regs_address, push_regs)
-    assemble_opcode_list(assembler, pop_regs_address, pop_regs)
 
     current_address = getGlobalFunctions("_thunks")[0].getEntryPoint().add(INSTRUCTION_SIZE) # type: ignore
     if not current_address:
