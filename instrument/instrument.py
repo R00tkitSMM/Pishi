@@ -1,24 +1,23 @@
 #@author Meysam
 #@category macOS.kernel
+
 import os
 import json
 import jarray
 import json
 import os
-
 from ghidra.program.model.block import BasicBlockModel
 from ghidra.util.task import ConsoleTaskMonitor
 from ghidra.app.script import GhidraScript
-from ghidra.app.script import GhidraScript
 from ghidra.app.plugin.assembler import Assemblers;
 from ghidra.program.model.symbol import SourceType
-from ghidra.util.task import ConsoleTaskMonitor
-from ghidra.app.script import GhidraScript
 from ghidra.program.model.address import Address
 from ghidra.program.model.listing import CodeUnit
 from ghidra.program.model.listing import Listing
 from ghidra.program.flatapi import FlatProgramAPI
 from ghidra.program.model.mem import MemoryBlock
+
+INSTRUCTION_SIZE = 4
 
 push_regs = """nop
 sub sp,sp,#+0x100
@@ -92,13 +91,10 @@ ldr x0,[sp]
 add sp, sp, #0x100
 ret"""
 
-INSTRUCTION_SIZE = 4
-
 def assemble_opcode_list(assembler, address, opcodes):
      asmcode = opcodes.splitlines()
      assembler.assemble(address, asmcode)
      return address.add(len(asmcode) * INSTRUCTION_SIZE) # size of each inst 
-
 
 def generate_assembly_instructions(x64_number):
     if not isinstance(x64_number, str) or len(x64_number) > 16:
@@ -119,7 +115,6 @@ def generate_assembly_instructions(x64_number):
     instructions.append("movk x0,#0x{},LSL #48".format(segments[0]))
     return instructions
 
-
 def assemble_opcode(assembler, address, opcode):
      assembler.assemble(address, opcode)
      return address.add(INSTRUCTION_SIZE) # size of each inst 
@@ -128,7 +123,6 @@ def assemble_opcode(assembler, address, opcode):
 def create_label(address, label_name):
     symbol_table = currentProgram.getSymbolTable() # type: ignore
     symbol_table.createLabel(address, label_name, SourceType.USER_DEFINED)
-
 
 def get_opcode_by_address(address):
     listing = currentProgram.getListing() # type: ignore
@@ -140,7 +134,6 @@ def addresss_to_file_offset(address):
     mem = currentProgram.getMemory() # type: ignore
     sourceinfo = mem.getAddressSourceInfo(address)
     return sourceinfo.getFileOffset()
-
 
 def do_function_basic_blocks(function):
     basic_blocks = []
@@ -181,7 +174,6 @@ class Instruction(GhidraScript):
         #print("original_opcode  {}".format(str(original_opcode)))
         print(index)
 
-
          # get orignal instruction before patch.
         jump_back_instruction = "b {}".format("meysam_return_number_" + str(index)) # Change this to your desired instruction
 
@@ -190,12 +182,9 @@ class Instruction(GhidraScript):
         memory = currentProgram.getMemory()
         memory.getBytes(patch_address, original_opcode)
 
-
         assembler = Assemblers.getAssembler(currentProgram) # type: ignore
         create_label(stub_address, "meysam_stub_number_" + str(index))
         create_label(patch_address.add(INSTRUCTION_SIZE), "meysam_return_number_" + str(index))
-
-       
 
         # Patch the BB to jump to out stub_address# label 
         patched_instruction = "b {}".format("meysam_stub_number_" + str(index)) # Change this to your desired instruction
@@ -228,13 +217,9 @@ class Instruction(GhidraScript):
             memory.setBytes(stub_address, original_opcode)
             stub_address = stub_address.add(INSTRUCTION_SIZE) 
 
-
         stub_address = assemble_opcode(assembler, stub_address, jump_back_instruction)
 
-        # TODO:
-        # Fix address related operations in original_opcode.
         return stub_address
-
 
 def bb_start_address(basic_block):
     start = None
@@ -274,20 +259,12 @@ def check_nonrelative(inst):
 # find correct inst to patch or skip and return original opcode
 def find_correct_inst_or_skip_return_original(block):
 
-    # TODO: 
-    # Ignore PAC instrctions, they are context aware, so they depend on current address.
-    # Find non relative instrction, e.g mov, add, sub ,... return its address + orignal opcode
-    # Find relative instrctions e.g ( not call ) return needs to fix then return its address + orignal opcode
-    # should I instrument one instrction size, basic blocks? like "B"
-    # we don't need to worry about indirect jmp or call with pac any of them use mov inst so we can easily replace it. so they are already covered. 
-    
     patch_address = None
     index = 0
     listing = currentProgram.getListing() # type: ignore
     instructions = listing.getInstructions(block, True)
     bb_addr = toAddr(bb_start_address(block)) # type: ignore
     
-
     for inst in instructions:
         if check_nonrelative(str(inst)):
             patch_address = bb_addr.add(index * INSTRUCTION_SIZE)
@@ -298,10 +275,8 @@ def find_correct_inst_or_skip_return_original(block):
     return [None, None, False]
 
 def get_config(kext):
-
     with open(os.path.dirname(os.path.realpath(__file__))+'/config.json', 'r') as file:
         data = json.load(file)
-    
     return data[kext]
 
 def get_kext():
@@ -336,7 +311,7 @@ def main():
 
     start_address, end_address = get_kext()
     if start_address == None or end_address == None:
-        kext = get_config('instrument_range') # TODO: get section range from file not config file.
+        kext = get_config('instrument_range')
         start_address = str(kext["start_address"])
         end_address = str(kext["end_address"])
 
@@ -354,7 +329,6 @@ def main():
     assemble_opcode_list(assembler, push_regs_address, push_regs)
     assemble_opcode_list(assembler, pop_regs_address, pop_regs)
 
-    # inst_stub is 5MB nop instructions. 
     current_address = getGlobalFunctions("_thunks")[0].getEntryPoint().add(INSTRUCTION_SIZE) # type: ignore
     if not current_address:
         print("Could not find _thunks.")
