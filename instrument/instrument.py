@@ -223,8 +223,7 @@ def get_kext(kext):
                 return [str(block.getStart()), str(block.getEnd())]
         
     return [None, None]
-
-
+    
 def find_thunk(pishi_start_address, pishi_end_address):
     
     thunk = [95, 36, 3, -43, -2, 15, 31, -8, -74, -1, -1, -105, 32, 40, -120, -46]
@@ -240,9 +239,7 @@ def find_thunk(pishi_start_address, pishi_end_address):
             return pointer.add(INSTRUCTION_SIZE)
         pointer = pointer.add(INSTRUCTION_SIZE)
 
-
 def main():
-
     global current_address
     stub_gen = Instruction()
     assembler = Assemblers.getAssembler(currentProgram) # type: ignore
