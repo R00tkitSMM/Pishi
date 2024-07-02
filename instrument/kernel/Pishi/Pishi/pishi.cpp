@@ -62,12 +62,15 @@ static int pishi_close(dev_t dev, int flags, int devtype, proc_t p);
 void sanitizer_cov_trace_pc(uint64_t address);
 void fuzz(char*  buffer);
 
-uintptr_t* buffer_instrument = 0;
+uintptr_t* buffer_instrument = NULL;
+IOMemoryMap *currnet_task_map = NULL;
+IOBufferMemoryDescriptor *memoryDescriptor = NULL;
+
 bool do_instrument = false;
-uint64_t instrumented_thread = UINT_MAX;
-IOMemoryMap *currnet_task_map;
-IOBufferMemoryDescriptor *memoryDescriptor;
 volatile bool do_log = false;
+
+uint64_t instrumented_thread = UINT_MAX;
+
 static int dev_major;
 
 static const struct cdevsw
@@ -96,7 +99,7 @@ struct pishi_buf_desc {
     size_t sz;      /* size of shared buffer [out] */
 };
 
-void my_printf(const char *format, ...) 
+void my_printf(const char *format, ...)
 {
     if( do_log ) {
         va_list args;
@@ -106,7 +109,7 @@ void my_printf(const char *format, ...)
     }
 }
 
-IOBufferMemoryDescriptor * createSharedMemory(size_t size) 
+IOBufferMemoryDescriptor * createSharedMemory(size_t size)
 {
     IOBufferMemoryDescriptor* memoryDescriptor = NULL;
     memoryDescriptor = IOBufferMemoryDescriptor::withOptions(kIODirectionOutIn | kIOMemoryKernelUserShared, size, PAGE_SIZE);
@@ -134,9 +137,16 @@ uintptr_t* map_memoryinto_current_task()
     return (uintptr_t*) currnet_task_map->getVirtualAddress();
 }
 
+static bool isDeviceOpen = false;
+
 static int
 pishi_open(dev_t dev, int flags, int devtype, proc_t p)
 {
+    if ( isDeviceOpen ) {
+        return -EBUSY;
+    }
+    
+    isDeviceOpen = true;
     return 0;
 }
 
@@ -145,6 +155,7 @@ pishi_close(dev_t dev, int flags, int devtype, proc_t p)
 {
     do_instrument = false;
     instrumented_thread = UINT_MAX;
+    buffer_instrument = NULL;
     
     if ( memoryDescriptor ) {
         memoryDescriptor->release();
@@ -155,6 +166,8 @@ pishi_close(dev_t dev, int flags, int devtype, proc_t p)
         currnet_task_map->release();
         currnet_task_map = NULL;
     }
+    
+    isDeviceOpen = false;
     return 0;
 }
 
@@ -182,44 +195,51 @@ pishi_ioctl(dev_t dev, unsigned long cmd, caddr_t _data, int fflag, proc_t p)
             instrumented_thread = UINT_MAX;
             kcov* area = (kcov*) buffer_instrument;
             area->kcov_pos = 0;
-
+            
             my_printf("[meysam:PISHI_IOCTL_MAP] instrumented_thread %llu, do_instrument %d" ,instrumented_thread, do_instrument);
             break;
         }
             
         case PISHI_IOCTL_START: {
-            // TODO: atomic
+
+            if (!buffer_instrument) {
+                my_printf("[meysm] PISHI_IOCTL_START buffer_instrument is NULL\n");
+                break;
+            }
             if ( do_instrument ) {
                 my_printf("[meysm] PISHI_IOCTL_START do_instrument is already on\n");
-                return 0;
+                break;
             }
+            
             uint64_t threadID = thread_tid(current_thread());
             instrumented_thread =  threadID;
             do_instrument = true;
-            my_printf("[meysam:PISHI_IOCTL_START] instrumented_thread %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
+            
             kcov* area = (kcov*) buffer_instrument;
             if( area )
                 area->kcov_pos = 0;
+            
+            my_printf("[meysam:PISHI_IOCTL_START] ThreadID %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
             break;
         }
         case PISHI_IOCTL_STOP: {
             do_instrument = false;
             instrumented_thread = UINT_MAX;
-            my_printf("[meysam:PISI_IOCTL_STOP] instrumented_thread %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
+            my_printf("[meysam:PISI_IOCTL_STOP] ThreadID %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
             break;
         }
         case PISHI_IOCTL_TEST: {
             // generate hit, to test full package, otherwise we have to wait until ghidra finishes its job.
             sanitizer_cov_trace_pc(0x4141414141);
-            my_printf("[meysam:PISI_IOCTL_TEST] instrumented_thread %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
+            my_printf("[meysam:PISI_IOCTL_TEST] ThreadID %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
             break;
-        }   
+        }
         case PISHI_IOCTL_FUZZ: {
             fuzz((char*)_data);
             break;
         }
         case PISHI_IOCTL_UNMAP: {
-            my_printf("[meysam:PISI_IOCTL_UNMAP] instrumented_thread %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
+            my_printf("[meysam:PISI_IOCTL_UNMAP] ThreadID %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
             
             do_instrument = false;
             instrumented_thread = UINT_MAX;
@@ -249,52 +269,7 @@ ksancov_dev_clone(dev_t dev, int action)
     return 0;
 }
 
-kern_return_t Pishi_stop(kmod_info_t *ki, void *d)
-{
-    return KERN_SUCCESS;
-}
-
-void thread_create_dev_callback(void *, wait_result_t)
-{ 
-    IOSleep(1000);
-    dev_major = cdevsw_add(-1, &pishi_cdev);
-    if (dev_major < 0) {
-        my_printf("meysam: failed to allocate major device node\n");
-        return ;
-    }
-    dev_t dev = makedev(dev_major, 0);
-    void *node = devfs_make_node_clone(dev, DEVFS_CHAR, UID_ROOT, GID_WHEEL, 0666,
-                                       ksancov_dev_clone, PISHI_DEVNODE);
-    if (!node) {
-        my_printf("meysam: failed to create device node\n");
-    }
-    
-    my_printf("[meysam:thread_create_dev_callback] instrumented_thread %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
-}
-
-void create_dev_thread(thread_continue_t calllback) 
-{
-    thread_t thread;
-    kernel_thread_start(calllback, NULL, &thread);
-    thread_deallocate(thread);
-}
-
-kern_return_t Pishi_start(kmod_info_t * ki, void *d)
-{
-    // at this stage we are too early to be able to create a dev_node so I create it in another thread after 1 second.
-    create_dev_thread(thread_create_dev_callback);
-    
-    buffer_instrument = 0;
-    do_instrument = false;
-    instrumented_thread = UINT_MAX;
-    currnet_task_map = NULL;
-    memoryDescriptor = NULL;
-    
-    return KERN_SUCCESS;
-}
-
-//TODO: make read/write atomic.
-void sanitizer_cov_trace_pc(uint64_t address) 
+void sanitizer_cov_trace_pc(uint64_t address)
 {
     if (__improbable(do_instrument)) {
         my_printf("[meysam:after do_instrument] instrumented_thread %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
@@ -361,5 +336,44 @@ void fuzz(char* buffer) {
                         *p = 0x42424242;
                     }
 }
+
+
+kern_return_t Pishi_stop(kmod_info_t *ki, void *d)
+{
+    return KERN_SUCCESS;
+}
+
+void thread_create_dev_callback(void *, wait_result_t)
+{
+    IOSleep(1000);
+    dev_major = cdevsw_add(-1, &pishi_cdev);
+    if (dev_major < 0) {
+        my_printf("meysam: failed to allocate major device node\n");
+        return ;
+    }
+    dev_t dev = makedev(dev_major, 0);
+    void *node = devfs_make_node_clone(dev, DEVFS_CHAR, UID_ROOT, GID_WHEEL, 0666,
+                                       ksancov_dev_clone, PISHI_DEVNODE);
+    if (!node) {
+        my_printf("meysam: failed to create device node\n");
+    }
+    
+    my_printf("[meysam:thread_create_dev_callback] instrumented_thread %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
+}
+
+void create_dev_thread(thread_continue_t calllback)
+{
+    thread_t thread;
+    kernel_thread_start(calllback, NULL, &thread);
+    thread_deallocate(thread);
+}
+
+kern_return_t Pishi_start(kmod_info_t * ki, void *d)
+{
+    // at this stage we are too early to be able to create a dev_node so I create it in another thread after 1 second.
+    create_dev_thread(thread_create_dev_callback);
+    return KERN_SUCCESS;
+}
+
 
 }
