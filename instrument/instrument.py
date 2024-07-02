@@ -100,7 +100,7 @@ class Instruction(GhidraScript):
          # get orignal instruction before patch.
         jump_back_instruction = "b {}".format("meysam_return_number_" + str(index)) # Change this to your desired instruction
 
-        original_opcode = jarray.zeros(INSTRUCTION_SIZE,"b")
+        original_opcode = jarray.zeros(INSTRUCTION_SIZE,"b") # it took me one day to find out about jarray.
         print("patch_address {}\n".format(patch_address))
         memory = currentProgram.getMemory()
         memory.getBytes(patch_address, original_opcode)
@@ -224,11 +224,40 @@ def get_kext(kext):
         
     return [None, None]
 
+
+def find_thunk(pishi_start_address, pishi_end_address):
+    
+    thunk = [95, 36, 3, -43, -2, 15, 31, -8, -74, -1, -1, -105, 32, 40, -120, -46]
+    opcodes = jarray.zeros(INSTRUCTION_SIZE * 4 ,"b") # it took me one day to find out about jarray.
+    memory = currentProgram.getMemory()
+    pointer = toAddr(pishi_start_address)
+    end = toAddr(pishi_end_address)
+    memory.getBytes(pointer, opcodes)
+
+    while pointer < end:
+        memory.getBytes(pointer, opcodes)
+        if list(opcodes) == thunk:
+            return pointer.add(INSTRUCTION_SIZE)
+        pointer = pointer.add(INSTRUCTION_SIZE)
+
+
 def main():
 
     global current_address
     stub_gen = Instruction()
     assembler = Assemblers.getAssembler(currentProgram) # type: ignore
+
+    pishi_start_address, pishi_end_address = get_kext("Kcov.macOS.Pishi")
+    if pishi_start_address == None or pishi_end_address == None:
+        print("could not find Kcov.macOS.Pishi")
+        exit(0)
+        
+    current_address = find_thunk(pishi_start_address, pishi_end_address)
+    if not current_address:
+        print("Could not find _thunks.")
+        exit(0)
+
+    print("thunk address {}".format(current_address))
 
     kext = askString("Which Kext should we use for instrumentation?", "Please enter kext name(e.g com.apple.iokit.IOSurface). if you want to instrument address range( e.g a function) use config.json")
 
@@ -240,10 +269,6 @@ def main():
 
     print("start_address {}".format(start_address))
     print("end_address {}".format(end_address))
-
-    current_address = getGlobalFunctions("_thunks")[0].getEntryPoint().add(INSTRUCTION_SIZE) # type: ignore
-    if not current_address:
-        print("Could not find _thunks.")
 
     all_basic_blocks = get_basic_blocks(toAddr(start_address), toAddr(end_address)) # type: ignore #all kext for iosurface 
     if not all_basic_blocks:
