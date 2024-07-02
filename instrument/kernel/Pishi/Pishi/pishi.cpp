@@ -169,7 +169,7 @@ pishi_ioctl(dev_t dev, unsigned long cmd, caddr_t _data, int fflag, proc_t p)
             }
             
             uintptr_t* maped_address =  map_memoryinto_current_task();
-            if ( maped_address ) {
+            if ( !maped_address ) {
                 my_printf("[meysam] PISHI_IOCTL_MAP IOCTLTL maped_address is NULL\n");
                 break;
             }
