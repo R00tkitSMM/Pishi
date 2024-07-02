@@ -296,7 +296,7 @@ kern_return_t Pishi_start(kmod_info_t * ki, void *d)
 //TODO: make read/write atomic.
 void sanitizer_cov_trace_pc(uint64_t address) 
 {
-    if (__improbable(do_instrument == true)) {
+    if (__improbable(do_instrument)) {
         my_printf("[meysam:after do_instrument] instrumented_thread %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
         
         if (__improbable(buffer_instrument == NULL))
