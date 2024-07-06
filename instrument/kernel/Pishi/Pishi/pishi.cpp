@@ -52,6 +52,11 @@ extern "C" {
 #define PISHI_IOCTL_TEST         _IOW('K', 40, uintptr_t)
 #define PISHI_IOCTL_FUZZ         _IOW('K', 50, char*)
 
+
+#define str(s) #s
+#define xstr(s) str(s)
+#define REPEAT_COUNT 60000
+
 #define PISHI_DEVNODE "pishi"
 #define PISHNI_PATH "/dev/" PISHI_DEVNODE
 
@@ -406,7 +411,7 @@ void sanitizer_cov_trace_lr()
                 unsigned long pos = area->kcov_pos;
                 /*
                     each block represent unique BB.
-                    TODO: unslide
+                    TODO: 1- Get real BB address. 2- unslide.
                 */
                 area->kcov_area[pos] = (uintptr_t)__builtin_return_address(0);
                 area->kcov_pos +=1;
@@ -415,10 +420,12 @@ void sanitizer_cov_trace_lr()
     }
 }
 
+/*
+ 
 void instrument_thunks2()
 {
     asm volatile (
-                  ".rept 1\n"                       // Repeat the following block many times
+                  ".rept " xstr(REPEAT_COUNT) "\n"  // Repeat the following block many times
                   "    STR x30, [sp, #-16]!\n"      // save LR. we can't restore it in pop_regs. as we have jumped here.
                   "    bl _push_regs\n"
                   "    mov x0, #0x4141\n"           // fix the correct numner when instrumenting as arg0.
@@ -433,12 +440,14 @@ void instrument_thunks2()
                   ".endr\n"                         // End of repetition
                   );
 }
- 
 
+*/
+ 
+// instrument_thunks1 produce a lot smaller mach-o file. 
 void instrument_thunks1()
 {
     asm volatile (
-                  ".rept 1000000\n"                  // Repeat the following block many times
+                  ".rept " xstr(REPEAT_COUNT) "\n"  // Repeat the following block many times
                   "    STR x30, [sp, #-16]!\n"      // save LR. we can't restore it in pop_regs. as we have jumped here.
                   "    bl _push_regs\n"
                   "    bl _sanitizer_cov_trace_lr\n"
