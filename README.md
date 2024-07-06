@@ -1,16 +1,15 @@
 # Pishi
-Pishi is a static binary rewriting tool designed to instrument the macOS kernel and its kernel extensions (kexts). \
+Pishi is a static binary rewriting tool designed to instrument the macOS kernel extensions (kexts). \
 It includes a code coverage feature similar to Linux kcov.
 
 To-do list:
-- [ ] Port libprotobuf-mutator to macOS
+- [X] Port libprotobuf-mutator to macOS
+- [ ] instrumenting kernel itself.
 - [ ] Implementing fake copyClientEntitlement
-- [ ] Porting libprotobuf-mutator to macOS
 - [ ] Implementing CompareCoverage(memcmp, strcmp,...)
 - [ ] Revisit BBs( What other BBs can we hook in)\
-- [ ] decide on 
-* 1- Hand writing the patch to use less REGs and remove them from push/pop to safe some cpu cycles! no PAC.
-* 2- Getting BB address in runtine instead of getting it in instrumentation time. 
+- [ ] decide on Hand writing the patch to use less REGs and remove them from push/pop to safe some cpu cycles! no PAC.
+- [x] Getting BB address in runtine instead of getting it in instrumentation time. 
 
 ## Steps to Test Pishi in Parallels Desktop
 1. **Build Kernel Extension (kext)**
