@@ -118,9 +118,9 @@ class Instruction(GhidraScript):
         stub_address = stub_address.add(INSTRUCTION_SIZE * 2)
 
         # fill first arg of sanitizer_cov_trace_pc with address of patched instrction.(before aslr/noslid)
-        assembly_instructions = generate_assembly_instructions(str(patch_address))
-        for inst in assembly_instructions:
-            stub_address = assemble_opcode(assembler, stub_address, str(inst))
+        # assembly_instructions = generate_assembly_instructions(str(patch_address))
+        # for inst in assembly_instructions:
+        #   stub_address = assemble_opcode(assembler, stub_address, str(inst))
 
         # "bl sanitizer_cov_trace_pc"
         # "bl pop_regs"
@@ -226,8 +226,8 @@ def get_kext(kext):
     
 def find_thunk(pishi_start_address, pishi_end_address):
     
-    thunk = [95, 36, 3, -43, -2, 15, 31, -8, -74, -1, -1, -105, 32, 40, -120, -46]
-    opcodes = jarray.zeros(INSTRUCTION_SIZE * 4 ,"b") # it took me one day to find out about jarray.
+    thunk = [95, 36, 3, -43, -2, 15, 31, -8]
+    opcodes = jarray.zeros(INSTRUCTION_SIZE * 2 ,"b") # it took me one day to find out about jarray.
     memory = currentProgram.getMemory()
     pointer = toAddr(pishi_start_address)
     end = toAddr(pishi_end_address)

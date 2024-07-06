@@ -61,6 +61,7 @@ static int pishi_ioctl(dev_t dev, unsigned long cmd, caddr_t _data, int fflag, p
 static int pishi_open(dev_t dev, int flags, int devtype, proc_t p);
 static int pishi_close(dev_t dev, int flags, int devtype, proc_t p);
 void sanitizer_cov_trace_pc(uint64_t address);
+void sanitizer_cov_trace_lr();
 void fuzz(char*  buffer);
 
 uintptr_t* instrument_buffer = NULL;
@@ -264,7 +265,7 @@ pishi_ioctl(dev_t dev, unsigned long cmd, caddr_t _data, int fflag, proc_t p)
         case PISHI_IOCTL_TEST: {
 
             my_printf("[meysam] PISI_IOCTL_TEST ThreadID %llu do_instrument %d\n", instrumented_thread, do_instrument);
-            sanitizer_cov_trace_pc(0x4141414141);
+            //sanitizer_cov_trace_pc(0x4141414141);
             break;
         }
         case PISHI_IOCTL_FUZZ: {
@@ -280,29 +281,6 @@ static int
 ksancov_dev_clone(dev_t dev, int action)
 {
     return 0;
-}
-
-void sanitizer_cov_trace_pc(uint64_t address)
-{
-    if (__improbable(do_instrument)) {
-
-        my_printf("[meysam] sanitizer_cov_trace_pc instrumented_thread %llu do_instrument %d\n", instrumented_thread, do_instrument);
-        
-        if (__improbable(instrument_buffer == NULL))
-            return;
-        
-        if(__improbable(instrumented_thread == thread_tid(current_thread()))) {
-
-            kcov* area = (kcov*) instrument_buffer;
-            /* The first 64-bit word is the number of subsequent PCs. */
-            if (__probable(area->kcov_pos < 0x20000)) {
-
-                unsigned long pos = area->kcov_pos;
-                area->kcov_area[pos] = address;
-                area->kcov_pos +=1;
-            }
-        }
-    }
 }
 
 void push_regs()
@@ -385,10 +363,62 @@ void pop_regs() {
     );
 }
 
-void instrument_thunks()
+
+
+void sanitizer_cov_trace_pc(uint64_t address)
+{
+    if (__improbable(do_instrument)) {
+
+        my_printf("[meysam] sanitizer_cov_trace_pc instrumented_thread %llu do_instrument %d\n", instrumented_thread, do_instrument);
+        
+        if (__improbable(instrument_buffer == NULL))
+            return;
+        
+        if(__improbable(instrumented_thread == thread_tid(current_thread()))) {
+
+            kcov* area = (kcov*) instrument_buffer;
+            /* The first 64-bit word is the number of subsequent PCs. */
+            if (__probable(area->kcov_pos < 0x20000)) {
+
+                unsigned long pos = area->kcov_pos;
+                area->kcov_area[pos] = address;
+                area->kcov_pos +=1;
+            }
+        }
+    }
+}
+
+void sanitizer_cov_trace_lr()
+{
+    if (__improbable(do_instrument)) {
+
+        my_printf("[meysam] sanitizer_cov_trace_pc instrumented_thread %llu do_instrument %d\n", instrumented_thread, do_instrument);
+        
+        if (__improbable(instrument_buffer == NULL))
+            return;
+        
+        if(__improbable(instrumented_thread == thread_tid(current_thread()))) {
+
+            kcov* area = (kcov*) instrument_buffer;
+            /* The first 64-bit word is the number of subsequent PCs. */
+            if (__probable(area->kcov_pos < 0x20000)) {
+
+                unsigned long pos = area->kcov_pos;
+                /*
+                    each block represent unique BB.
+                    TODO: unslide
+                */
+                area->kcov_area[pos] = (uintptr_t)__builtin_return_address(0);
+                area->kcov_pos +=1;
+            }
+        }
+    }
+}
+
+void instrument_thunks2()
 {
     asm volatile (
-                  ".rept 100000\n"                  // Repeat the following block many times
+                  ".rept 1\n"                       // Repeat the following block many times
                   "    STR x30, [sp, #-16]!\n"      // save LR. we can't restore it in pop_regs. as we have jumped here.
                   "    bl _push_regs\n"
                   "    mov x0, #0x4141\n"           // fix the correct numner when instrumenting as arg0.
@@ -403,6 +433,23 @@ void instrument_thunks()
                   ".endr\n"                         // End of repetition
                   );
 }
+ 
+
+void instrument_thunks1()
+{
+    asm volatile (
+                  ".rept 1000000\n"                  // Repeat the following block many times
+                  "    STR x30, [sp, #-16]!\n"      // save LR. we can't restore it in pop_regs. as we have jumped here.
+                  "    bl _push_regs\n"
+                  "    bl _sanitizer_cov_trace_lr\n"
+                  "    bl _pop_regs\n"
+                  "    LDR x30, [sp], #16\n"        // restore LR
+                  "    nop\n"
+                  "    nop\n"
+                  ".endr\n"                         // End of repetition
+                  );
+}
+
 
 void fuzz(char* buffer) {
     
