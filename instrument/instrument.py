@@ -117,10 +117,11 @@ class Instruction(GhidraScript):
         # "bl push_regs"
         stub_address = stub_address.add(INSTRUCTION_SIZE * 2)
 
-        # fill first arg of sanitizer_cov_trace_pc with address of patched instrction.(before aslr/noslid)
-        # assembly_instructions = generate_assembly_instructions(str(patch_address))
-        # for inst in assembly_instructions:
-        #   stub_address = assemble_opcode(assembler, stub_address, str(inst))
+        #fill first arg of sanitizer_cov_trace_pc with address of patched instrction.(before aslr/noslid)
+        if False:
+            assembly_instructions = generate_assembly_instructions(str(patch_address))
+            for inst in assembly_instructions:
+                stub_address = assemble_opcode(assembler, stub_address, str(inst))
 
         # "bl sanitizer_cov_trace_pc"
         # "bl pop_regs"

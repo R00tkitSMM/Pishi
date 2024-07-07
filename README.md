@@ -2,14 +2,53 @@
 Pishi is a static binary rewriting tool designed to instrument the macOS kernel extensions (kexts). \
 It includes a code coverage feature similar to Linux kcov.
 
+After building and installing Pishi, you can use [my modified version of libprotobuf-mutator](https://github.com/R00tkitSMM/libprotobuf-mutator) to enable structure-aware, feedback-aware macOS kernel KEXT fuzzing with libFuzzer.
+
 To-do list:
 - [X] Port libprotobuf-mutator to macOS
-- [ ] instrumenting kernel itself.
+- [x] Getting BB address in runtine instead of getting it in instrumentation time.
+- [ ] clean up code use proper types, move definitions to header file.
 - [ ] Implementing fake copyClientEntitlement
 - [ ] Implementing CompareCoverage(memcmp, strcmp,...)
+- [ ] instrumenting kernel itself.
 - [ ] Revisit BBs( What other BBs can we hook in)\
 - [ ] decide on Hand writing the patch to use less REGs and remove them from push/pop to safe some cpu cycles! no PAC.
-- [x] Getting BB address in runtine instead of getting it in instrumentation time. 
+```
+
+void is_instrument_needed () {
+    asm volatile (
+                  "ldr x0, [%0]\n"
+                  :
+                  : "r"(&do_instrument)
+                  : "x0", "memory"
+         );
+}
+
+void instrument_thunks()
+{
+    volatile asm (
+                  ".rept 100000\n"                  // Repeat the following block many times
+                  "    STP x0, x30, [sp, #-16]!\n"     // save LR. we can't restore it in pop_regs. as we have jumped here.
+                  "    STR x8, [sp, #-8]!\n"
+                  "    bl _is_instrument_needed\n"
+                  "    cmp x0, #0\n"
+                  "    beq 1f\n"
+                  "    bl _push_regs\n"
+                  "    mov x0, #0x4141\n"           // fix the correct numner when instrumenting as arg0.
+                  "    mov x0, #0x4141\n"
+                  "    mov x0, #0x4141\n"
+                  "    mov x0, #0x4141\n"
+                  "    bl _sanitizer_cov_trace_pc\n"
+                  "    bl _pop_regs\n"
+                  "1:\n"
+                  "    LDR x8, [sp], #8\n"
+                  "    ldp x0, x30, [sp], #16\n"       // restore LR
+                  "    nop\n"
+                  "    nop\n"
+                  ".endr\n"                         // End of repetition
+                  );
+}
+```
 
 ## Steps to Test Pishi in Parallels Desktop
 1. **Build Kernel Extension (kext)**

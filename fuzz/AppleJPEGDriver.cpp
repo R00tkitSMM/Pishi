@@ -25,7 +25,7 @@ build:
 #define PISHI_IOCTL_STOP  _IOW('K', 20, uint64_t)
 #define PISHI_IOCTL_UNMAP _IOW('K', 30, uint64_t)
 #define PISHI_IOCTL_TEST  _IOW('K', 40, uintptr_t)
-#define PISHI_IOCTL_FUZZ  _IOW('K', 50, char *)
+#define PISHI_IOCTL_FUZZ  _IOW('K', 50, uint64_t)
 
 struct pishi_buf_desc
 {

@@ -4,27 +4,7 @@
 //
 //  Created by Meysam Firouzi on 30.06.24.
 
-#include <mach/mach_types.h>
-#include <IOKit/IOLib.h>
-#include <libkern/c++/OSBoolean.h>
-#include <string.h>
-#include <stdbool.h>
-#include <sys/sysctl.h>
-#include <libkern/libkern.h>
-#include <vm/pmap.h>
-#include <sys/conf.h>
-#include <sys/errno.h>
-#include <sys/ioctl.h>
-#include <sys/types.h>
-#include <sys/uio.h>
-#include <miscfs/devfs/devfs.h>
-#include <IOKit/IOService.h>
-#include <sys/proc.h>
-#include <IOKit/pci/IOPCIDevice.h>
-#include <IOKit/IOBufferMemoryDescriptor.h>
-#include <IOKit/IOMemoryDescriptor.h>
-#include <IOKit/IODMACommand.h>
-#include <libkern/OSAtomic.h>
+#include "pishi.hpp"
 
 // fake entitlement checkers
 class IOFuzzClient {
@@ -45,41 +25,16 @@ OSObject * IOFuzzClient::AMFIcopyClientEntitlement( task_t task,const char* enti
 
 extern "C" {
 
-#define PISHI_IOCTL_MAP          _IOWR('K', 8, struct pishi_buf_desc)
-#define PISHI_IOCTL_START        _IOW('K', 10, uintptr_t)
-#define PISHI_IOCTL_STOP         _IOW('K', 20, uint64_t)
-#define PISHI_IOCTL_UNMAP        _IOW('K', 30, uint64_t)
-#define PISHI_IOCTL_TEST         _IOW('K', 40, uintptr_t)
-#define PISHI_IOCTL_FUZZ         _IOW('K', 50, uint64_t)
-
-
-#define str(s) #s
-#define xstr(s) str(s)
-#define REPEAT_COUNT 60000
-
-#define PISHI_DEVNODE "pishi"
-#define PISHNI_PATH "/dev/" PISHI_DEVNODE
-
-kern_return_t helper_start(kmod_info_t* ki, void *d);
-kern_return_t helper_stop(kmod_info_t* ki, void *d);
-static int pishi_ioctl(dev_t dev, unsigned long cmd, caddr_t _data, int fflag, proc_t p);
-static int pishi_open(dev_t dev, int flags, int devtype, proc_t p);
-static int pishi_close(dev_t dev, int flags, int devtype, proc_t p);
-void sanitizer_cov_trace_pc(uint64_t address);
-void sanitizer_cov_trace_lr();
-void fuzz(uint64_t* p);
-
-uintptr_t* instrument_buffer = NULL;
 IOMemoryMap* currnet_task_map = NULL;
 IOBufferMemoryDescriptor* memoryDescriptor = NULL;
-
-bool do_instrument = false;
-volatile bool do_log = false;
-
 uint64_t instrumented_thread = UINT_MAX;
 
-static int dev_major;
+bool do_instrument = false;
+bool do_log = true;
+bool isDeviceOpen = false;
+kcov* coverage_area= NULL;
 
+static int dev_major;
 static const struct cdevsw
 pishi_cdev = {
     .d_open =  pishi_open,
@@ -96,17 +51,7 @@ pishi_cdev = {
     .d_type = 0
 };
 
-struct kcov {
-    unsigned long kcov_pos;
-    uintptr_t kcov_area[0];
-};
-
-struct pishi_buf_desc {
-    uintptr_t ptr;  /* ptr to shared buffer [out] */
-    size_t sz;      /* size of shared buffer [out] */
-};
-
-void my_printf(const char *format, ...)
+void print_message(const char *format, ...)
 {
     if( do_log ) {
         va_list args;
@@ -123,12 +68,12 @@ IOBufferMemoryDescriptor * createSharedMemory(size_t size)
     return memoryDescriptor;
 }
 
-uintptr_t* map_memoryinto_current_task()
+uint64_t* map_memoryinto_current_task()
 {
     memoryDescriptor = createSharedMemory( sizeof(kcov) + (0x20000 * (sizeof(uintptr_t)) ));
     if ( !memoryDescriptor ) {
 
-        my_printf("[meysam] Failed to create memory descriptor\n");
+        print_message("[PISHI] Failed to create memory descriptor\n");
         return NULL;
     }
     
@@ -136,17 +81,17 @@ uintptr_t* map_memoryinto_current_task()
     
     if ( !currnet_task_map ) {
 
-        my_printf("[meysam] Failed to map memory descriptor\n");
+        print_message("[PISHI] Failed to map memory descriptor\n");
         memoryDescriptor->release();
         memoryDescriptor = NULL;
         return NULL;
     }
     
-    instrument_buffer = (uintptr_t*) memoryDescriptor->getBytesNoCopy();
-    return (uintptr_t*) currnet_task_map->getVirtualAddress();
+    coverage_area = (kcov*) memoryDescriptor->getBytesNoCopy();;
+    coverage_area->kcov_pos = 0;
+    
+    return (uint64_t*) currnet_task_map->getVirtualAddress();
 }
-
-static bool isDeviceOpen = false;
 
 static int
 pishi_open(dev_t dev, int flags, int devtype, proc_t p)
@@ -165,7 +110,7 @@ pishi_close(dev_t dev, int flags, int devtype, proc_t p)
 {
     do_instrument = false;
     instrumented_thread = UINT_MAX;
-    instrument_buffer = NULL;
+    coverage_area = NULL;
     
     if ( memoryDescriptor ) {
 
@@ -190,49 +135,48 @@ pishi_ioctl(dev_t dev, unsigned long cmd, caddr_t _data, int fflag, proc_t p)
 
         case PISHI_IOCTL_MAP: {
             
-            my_printf("[meysam] PISHI_IOCTL_MAP instrumented_thread %llu do_instrument %d" ,instrumented_thread, do_instrument);
-            if( instrument_buffer ) {
+            print_message("[PISHI] PISHI_IOCTL_MAP instrumented_thread %llu do_instrument %d\n", instrumented_thread, do_instrument);
+            if( coverage_area ) {
 
-                my_printf("[meysam] PISHI_IOCTL_MAP IOCTLTL instrument_buffer is already mapped\n");
+                print_message("[PISHI] PISHI_IOCTL_MAP IOCTLTL instrument_buffer is already mapped\n");
                 break;
             }
             
-            uintptr_t* maped_address =  map_memoryinto_current_task();
+            uint64_t* maped_address =  map_memoryinto_current_task();
             if ( !maped_address ) {
 
-                my_printf("[meysam] PISHI_IOCTL_MAP IOCTL maped_address is NULL\n");
+                print_message("[PISHI] PISHI_IOCTL_MAP IOCTL maped_address is NULL\n");
                 break;
             }
             
             pishi_buf_desc *p = (pishi_buf_desc*)_data;
-            p->ptr = (uintptr_t)maped_address;
-            p->sz = sizeof(kcov) + (0x20000 * sizeof(uintptr_t));
+            p->ptr = (user_addr_t) maped_address;
+            p->sz = (user_size_t) sizeof(kcov) + (0x20000 * sizeof(uintptr_t));
             
             do_instrument = false;
             instrumented_thread = UINT_MAX;
-            kcov* area = (kcov*) instrument_buffer;
-            area->kcov_pos = 0;
-            
+
             break;
         }
             
         case PISHI_IOCTL_START: {
             
-            my_printf("[meysam] PISHI_IOCTL_START ThreadID %llu do_instrument %d\n", instrumented_thread, do_instrument);
-            if (!instrument_buffer) {
-
-                my_printf("[meysam] PISHI_IOCTL_START instrument_buffer is NULL\n");
-                break;
-            }
+            print_message("[PISHI] PISHI_IOCTL_START ThreadID %llu do_instrument %d\n", instrumented_thread, do_instrument);
+            
             if ( do_instrument ) {
 
-                my_printf("[meysam] PISHI_IOCTL_START do_instrument is already on\n");
+                print_message("[PISHI] PISHI_IOCTL_START do_instrument is already on\n");
                 break;
             }
             
-            kcov* area = (kcov*) instrument_buffer;
-            if( area )
-                area->kcov_pos = 0;
+            if (!coverage_area) {
+
+                print_message("[PISHI] PISHI_IOCTL_START coverage_area is NULL\n");
+                break;
+            }
+            
+            if( coverage_area )
+                coverage_area->kcov_pos = 0;
 
             instrumented_thread = thread_tid(current_thread());
             do_instrument = true;
@@ -241,10 +185,10 @@ pishi_ioctl(dev_t dev, unsigned long cmd, caddr_t _data, int fflag, proc_t p)
         }
         case PISHI_IOCTL_UNMAP: {
 
-            my_printf("[meysam] PISI_IOCTL_UNMAP ThreadID %llu do_instrument %d\n", instrumented_thread, do_instrument);
+            print_message("[PISHI] PISI_IOCTL_UNMAP ThreadID %llu do_instrument %d\n", instrumented_thread, do_instrument);
             do_instrument = false;
             instrumented_thread = UINT_MAX;
-            instrument_buffer = NULL;
+            coverage_area = NULL;
 
             if ( memoryDescriptor ) {
 
@@ -261,20 +205,20 @@ pishi_ioctl(dev_t dev, unsigned long cmd, caddr_t _data, int fflag, proc_t p)
             break;
         }
         case PISHI_IOCTL_STOP: {
-
+            
             do_instrument = false;
             instrumented_thread = UINT_MAX;
-            my_printf("[meysam] PISI_IOCTL_STOP ThreadID %llu do_instrument %d\n", instrumented_thread, do_instrument);
+            print_message("[PISHI] PISI_IOCTL_STOP ThreadID %llu do_instrument %d\n", instrumented_thread, do_instrument);
             break;
         }
         case PISHI_IOCTL_TEST: {
 
-            my_printf("[meysam] PISI_IOCTL_TEST ThreadID %llu do_instrument %d\n", instrumented_thread, do_instrument);
-            //sanitizer_cov_trace_pc(0x4141414141);
+            print_message("[PISHI] PISI_IOCTL_TEST ThreadID %llu do_instrument %d\n", instrumented_thread, do_instrument);
+            sanitizer_cov_trace_pc(0x41414141);
             break;
         }
         case PISHI_IOCTL_FUZZ: {
-            fuzz((uint64_t*)_data);
+            fuzz_me((uintptr_t*)_data);
             break;
         }
     }
@@ -325,7 +269,6 @@ void push_regs()
             "sub sp, sp, #0x50\n"
             "ret"
         );
-    
 }
 
 void pop_regs() {
@@ -367,24 +310,21 @@ void pop_regs() {
     );
 }
 
-void sanitizer_cov_trace_pc(uint64_t address)
+void sanitizer_cov_trace_pc(uintptr_t address)
 {
     if (__improbable(do_instrument)) {
-
-        my_printf("[meysam] sanitizer_cov_trace_pc instrumented_thread %llu do_instrument %d\n", instrumented_thread, do_instrument);
         
-        if (__improbable(instrument_buffer == NULL))
+        if (__improbable(coverage_area == NULL))
             return;
         
         if(__improbable(instrumented_thread == thread_tid(current_thread()))) {
 
-            kcov* area = (kcov*) instrument_buffer;
             /* The first 64-bit word is the number of subsequent PCs. */
-            if (__probable(area->kcov_pos < 0x20000)) {
+            if (__probable(coverage_area->kcov_pos < 0x20000)) {
 
-                unsigned long pos = area->kcov_pos;
-                area->kcov_area[pos] = address;
-                area->kcov_pos +=1;
+                unsigned long pos = coverage_area->kcov_pos;
+                coverage_area->kcov_area[pos] = address;
+                coverage_area->kcov_pos +=1;
             }
         }
     }
@@ -393,36 +333,31 @@ void sanitizer_cov_trace_pc(uint64_t address)
 void sanitizer_cov_trace_lr()
 {
     if (__improbable(do_instrument)) {
-
-        my_printf("[meysam] sanitizer_cov_trace_pc instrumented_thread %llu do_instrument %d\n", instrumented_thread, do_instrument);
         
-        if (__improbable(instrument_buffer == NULL))
+        if (__improbable(coverage_area == NULL))
             return;
         
         if(__improbable(instrumented_thread == thread_tid(current_thread()))) {
 
-            kcov* area = (kcov*) instrument_buffer;
             /* The first 64-bit word is the number of subsequent PCs. */
-            if (__probable(area->kcov_pos < 0x20000)) {
+            if (__probable(coverage_area->kcov_pos < 0x20000)) {
 
-                unsigned long pos = area->kcov_pos;
+                unsigned long pos = coverage_area->kcov_pos;
                 /*
                     each block represent unique BB.
                     TODO: 1- Get real BB address. 2- unslide.
                 */
-                area->kcov_area[pos] = (uintptr_t)__builtin_return_address(0);
-                area->kcov_pos +=1;
+                coverage_area->kcov_area[pos] = (uintptr_t)__builtin_return_address(0);
+                coverage_area->kcov_pos +=1;
             }
         }
     }
 }
 
-/*
- 
 void instrument_thunks2()
 {
     asm volatile (
-                  ".rept " xstr(REPEAT_COUNT) "\n"  // Repeat the following block many times
+                  ".rept " xstr(REPEAT_COUNT_THUNK1) "\n"  // Repeat the following block many times
                   "    STR x30, [sp, #-16]!\n"      // save LR. we can't restore it in pop_regs. as we have jumped here.
                   "    bl _push_regs\n"
                   "    mov x0, #0x4141\n"           // fix the correct numner when instrumenting as arg0.
@@ -438,12 +373,10 @@ void instrument_thunks2()
                   );
 }
 
-*/
-
 void instrument_thunks1()
 {
     asm volatile (
-                  ".rept " xstr(REPEAT_COUNT) "\n"  // Repeat the following block many times
+                  ".rept " xstr(REPEAT_COUNT_THUNK2) "\n"  // Repeat the following block many times
                   "    STR x30, [sp, #-16]!\n"      // save LR. we can't restore it in pop_regs. as we have jumped here.
                   "    bl _push_regs\n"
                   "    bl _sanitizer_cov_trace_lr\n"
@@ -455,16 +388,15 @@ void instrument_thunks1()
                   );
 }
 
-
-void fuzz(uint64_t* p)
+void fuzz_me(uintptr_t* p)
 {
     int error = 0;
     size_t len;
-    char k_buffer[0x1000] = {0};
+    char k_buffer[0x100] = {0};
     
     error = copyinstr((user_addr_t)*p, k_buffer, sizeof(k_buffer), &len);
     if (error) {
-        printf("[MEYSAM] can't copyinstr\n");
+        print_message("[PISHI] can't copyinstr\n");
         return;
     }
     
@@ -496,7 +428,7 @@ void thread_create_dev_callback(void *, wait_result_t)
     dev_major = cdevsw_add(-1, &pishi_cdev);
     if (dev_major < 0) {
 
-        my_printf("meysam: failed to allocate major device node\n");
+        print_message("[PISHI] failed to allocate major device node\n");
         return ;
     }
     dev_t dev = makedev(dev_major, 0);
@@ -504,10 +436,10 @@ void thread_create_dev_callback(void *, wait_result_t)
                                        ksancov_dev_clone, PISHI_DEVNODE);
     if (!node) {
 
-        my_printf("meysam: failed to create device node\n");
+        print_message("[PISHI] Failed to create device node\n");
     }
     
-    my_printf("[meysam:thread_create_dev_callback] instrumented_thread %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
+    print_message("[PISHI] instrumented_thread %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
 }
 
 void create_dev_thread(thread_continue_t calllback)
@@ -519,7 +451,7 @@ void create_dev_thread(thread_continue_t calllback)
 
 kern_return_t Pishi_start(kmod_info_t * ki, void *d)
 {
-    // at this stage we are too early to be able to create a dev_node so I create it in another thread after 1 second.
+    // probably at this stage we are too early to be able to create a dev_node, it fails, so I create it in another thread after 1 second.
     create_dev_thread(thread_create_dev_callback);
     return KERN_SUCCESS;
 }

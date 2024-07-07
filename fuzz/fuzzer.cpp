@@ -14,13 +14,13 @@ build:
 #include <sys/stat.h>
 #include <time.h>
 
-#define DEVICE_NAME       "/dev/pishi"
+#define DEVICE_NAME         "/dev/pishi"
 #define PISHI_IOCTL_MAP     _IOWR('K', 8, struct pishi_buf_desc)
 #define PISHI_IOCTL_START   _IOW('K', 10, uintptr_t)
 #define PISHI_IOCTL_STOP    _IOW('K', 20, uint64_t)
 #define PISHI_IOCTL_UNMAP   _IOW('K', 30, uint64_t)
 #define PISHI_IOCTL_TEST    _IOW('K', 40, uintptr_t)
-#define PISHI_IOCTL_FUZZ    _IOW('K', 50, char*)
+#define PISHI_IOCTL_FUZZ    _IOW('K', 50, uint64_t)
 
 struct pishi_buf_desc
 {
@@ -104,8 +104,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
   kcov_start();
 
-  ioctl(covfd, PISHI_IOCTL_FUZZ, data);
+  
+  uintptr_t** a = (uintptr_t**)&data;
+  ioctl(covfd, PISHI_IOCTL_FUZZ, a);
+  //ioctl(covfd, PISHI_IOCTL_TEST, &a);
 
   kcov_stop();
+
+
   return 0;
 }
