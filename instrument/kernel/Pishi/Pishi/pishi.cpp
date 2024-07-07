@@ -50,7 +50,7 @@ extern "C" {
 #define PISHI_IOCTL_STOP         _IOW('K', 20, uint64_t)
 #define PISHI_IOCTL_UNMAP        _IOW('K', 30, uint64_t)
 #define PISHI_IOCTL_TEST         _IOW('K', 40, uintptr_t)
-#define PISHI_IOCTL_FUZZ         _IOW('K', 50, char*)
+#define PISHI_IOCTL_FUZZ         _IOW('K', 50, uint64_t)
 
 
 #define str(s) #s
@@ -67,7 +67,7 @@ static int pishi_open(dev_t dev, int flags, int devtype, proc_t p);
 static int pishi_close(dev_t dev, int flags, int devtype, proc_t p);
 void sanitizer_cov_trace_pc(uint64_t address);
 void sanitizer_cov_trace_lr();
-void fuzz(char*  buffer);
+void fuzz(uint64_t* p);
 
 uintptr_t* instrument_buffer = NULL;
 IOMemoryMap* currnet_task_map = NULL;
@@ -274,8 +274,7 @@ pishi_ioctl(dev_t dev, unsigned long cmd, caddr_t _data, int fflag, proc_t p)
             break;
         }
         case PISHI_IOCTL_FUZZ: {
-
-            fuzz((char*)_data);
+            fuzz((uint64_t*)_data);
             break;
         }
     }
@@ -368,8 +367,6 @@ void pop_regs() {
     );
 }
 
-
-
 void sanitizer_cov_trace_pc(uint64_t address)
 {
     if (__improbable(do_instrument)) {
@@ -442,8 +439,7 @@ void instrument_thunks2()
 }
 
 */
- 
-// instrument_thunks1 produce a lot smaller mach-o file. 
+
 void instrument_thunks1()
 {
     asm volatile (
@@ -460,19 +456,34 @@ void instrument_thunks1()
 }
 
 
-void fuzz(char* buffer) {
+void fuzz(uint64_t* p)
+{
+    int error = 0;
+    size_t len;
+    char k_buffer[0x1000] = {0};
     
-    if (strlen(buffer) > 5)
-        if(buffer[0] =='M')
-            if(buffer[1] =='E')
-                if(buffer[2] =='Y')
-                    if(buffer[3] =='S') {
-                        printf("boom!\n");
-                        int* p = (int*)0x41414141;
-                        *p = 0x42424242;
+    error = copyinstr((user_addr_t)*p, k_buffer, sizeof(k_buffer), &len);
+    if (error) {
+        printf("[MEYSAM] can't copyinstr\n");
+        return;
+    }
+    
+    if (strlen(k_buffer) > 9)
+        if(k_buffer[0] =='M')
+            if(k_buffer[1] =='E')
+                if(k_buffer[2] =='Y')
+                    if(k_buffer[3] =='S')
+                        if(k_buffer[4] =='A')
+                            if(k_buffer[5] =='M')
+                                if(k_buffer[6] =='6')
+                                    if(k_buffer[7] =='7')
+                                        if(k_buffer[8] =='8')
+                                            if(k_buffer[9] =='9') {
+                                                printf("boom!\n");
+                                                int* p = (int*)0x41414141;
+                                                *p = 0x42424242;
                     }
 }
-
 
 kern_return_t Pishi_stop(kmod_info_t *ki, void *d)
 {
