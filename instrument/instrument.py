@@ -19,6 +19,10 @@ from ghidra.program.model.mem import MemoryBlock
 
 INSTRUCTION_SIZE = 4
 
+# if USE_UNSLIDE is defined, the instrument will call sanitizer_cov_trace_pc, allowing us to obtain the unslid and correct basic block (BB) address. 
+# also you have to define this in pishi.hpp file.
+USE_UNSLIDE = True
+
 def generate_assembly_instructions(x64_number):
     if not isinstance(x64_number, str) or len(x64_number) > 16:
         raise ValueError("Input must be a 64-bit hexadecimal number as a string, e.g., 'fffffffffffffffe'")
@@ -118,7 +122,7 @@ class Instruction(GhidraScript):
         stub_address = stub_address.add(INSTRUCTION_SIZE * 2)
 
         #fill first arg of sanitizer_cov_trace_pc with address of patched instrction.(before aslr/noslid)
-        if False:
+        if USE_UNSLIDE:
             assembly_instructions = generate_assembly_instructions(str(patch_address))
             for inst in assembly_instructions:
                 stub_address = assemble_opcode(assembler, stub_address, str(inst))

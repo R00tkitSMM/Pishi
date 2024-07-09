@@ -354,10 +354,11 @@ void sanitizer_cov_trace_lr()
     }
 }
 
-void instrument_thunks2()
+#ifdef USE_UNSLIDE
+void instrument_thunks()
 {
     asm volatile (
-                  ".rept " xstr(REPEAT_COUNT_THUNK1) "\n"  // Repeat the following block many times
+                  ".rept " xstr(REPEAT_COUNT_THUNK) "\n"  // Repeat the following block many times
                   "    STR x30, [sp, #-16]!\n"      // save LR. we can't restore it in pop_regs. as we have jumped here.
                   "    bl _push_regs\n"
                   "    mov x0, #0x4141\n"           // fix the correct numner when instrumenting as arg0.
@@ -372,11 +373,11 @@ void instrument_thunks2()
                   ".endr\n"                         // End of repetition
                   );
 }
-
-void instrument_thunks1()
+#else
+void instrument_thunks()
 {
     asm volatile (
-                  ".rept " xstr(REPEAT_COUNT_THUNK2) "\n"  // Repeat the following block many times
+                  ".rept " xstr(REPEAT_COUNT_THUNK) "\n"  // Repeat the following block many times
                   "    STR x30, [sp, #-16]!\n"      // save LR. we can't restore it in pop_regs. as we have jumped here.
                   "    bl _push_regs\n"
                   "    bl _sanitizer_cov_trace_lr\n"
@@ -387,6 +388,7 @@ void instrument_thunks1()
                   ".endr\n"                         // End of repetition
                   );
 }
+#endif
 
 void fuzz_me(uintptr_t* p)
 {

@@ -40,12 +40,15 @@ extern "C" {
 #define PISHI_IOCTL_TEST         _IOW('K', 40, uintptr_t)
 #define PISHI_IOCTL_FUZZ         _IOW('K', 50, uint64_t)
 
-
+/* 
+    If USE_UNSLIDE is defined, the instrument will call sanitizer_cov_trace_pc, allowing us to obtain the unslid and correct basic block (BB) address.
+    Also have to set USE_UNSLIDE to True in instrument.py
+    USE_UNSLIDE will produce bigger mach-o file.
+*/
+#define USE_UNSLIDE
+#define REPEAT_COUNT_THUNK 60000
 #define str(s) #s
 #define xstr(s) str(s)
-#define REPEAT_COUNT_THUNK1 0
-#define REPEAT_COUNT_THUNK2 60000
-
 #define PISHI_DEVNODE "pishi"
 #define PISHNI_PATH "/dev/" PISHI_DEVNODE
 
