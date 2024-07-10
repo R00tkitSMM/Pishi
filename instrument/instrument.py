@@ -19,8 +19,6 @@ from ghidra.program.model.mem import MemoryBlock
 
 INSTRUCTION_SIZE = 4
 
-# if USE_UNSLIDE is defined, the instrument will call sanitizer_cov_trace_pc, allowing us to obtain the unslid and correct basic block (BB) address. 
-# also you have to define this in pishi.hpp file.
 USE_UNSLIDE = True
 
 def generate_assembly_instructions(x64_number):
@@ -132,12 +130,8 @@ class Instruction(GhidraScript):
         # "ldr x30, [sp], #0x10"
         stub_address =  stub_address.add(INSTRUCTION_SIZE * 3)
 
-        if needs_fix:
-            # TODO: if needs fix use assemble_opcode, it will disasm/asm function the opcode for us,
-            # so we don't need to get our hands dirty.
-            # the ghidra assembler generates correct opcode and fix the address 
-            # stub_address = assemble_opcode(assembler, stub_address, original_inst)
-            pass
+        if needs_fix:        
+            stub_address = assemble_opcode(assembler, stub_address, str(original_inst))
         else:
             # write original opcode
             clear_address(stub_address, INSTRUCTION_SIZE)
@@ -184,6 +178,19 @@ def check_nonrelative(inst):
     
     return False
 
+
+def check_relative(inst):
+
+    Instruction = ['b'] # TODO: add more branch instructions. 
+
+    for i in Instruction:
+        if inst.startswith(i) and not inst.startswith('bl'):
+            print inst
+            return True
+    
+    return False
+
+
 # find correct inst to patch or skip and return original opcode
 def find_correct_inst_or_skip_return_original(block):
 
@@ -198,6 +205,15 @@ def find_correct_inst_or_skip_return_original(block):
             patch_address = bb_addr.add(index * INSTRUCTION_SIZE)
             original_opcode  = get_opcode_by_address(patch_address)
             return [patch_address, original_opcode, False]
+        index = index + 1
+
+    index = 0 # reset index
+    instructions = listing.getInstructions(block, True) # the iterative has been consumed so get it one more time.
+    for inst in instructions:
+        if check_relative(str(inst)):
+            patch_address = bb_addr.add(index * INSTRUCTION_SIZE)
+            original_opcode  = get_opcode_by_address(patch_address)
+            return [patch_address, original_opcode, True]
         index = index + 1
 
     return [None, None, False]
