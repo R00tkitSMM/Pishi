@@ -276,5 +276,6 @@ void instrument_thunks()
 * https://users.cs.utah.edu/~snagy/papers/19SP.pdf
 * https://agra.informatik.uni-bremen.de/doc/konf/FDL2022_nbruns.pdf
 * https://users.cs.utah.edu/~snagy/papers/21CCS.pdf
+* https://www.s3.eurecom.fr/docs/eurosp22_mantovani.pdf
 
 
