@@ -5,6 +5,18 @@ Pishi only instruments basic blocks (BBs) that contain at least one non-relative
 After checking LibFuzzer with different code bases using the `-fsanitize=address` flag and using Ghidra to inspect the instrumentation, I can confirm that LibFuzzer also does not instrument basic blocks without non-relative instructions.
 You can instrument your code with `-fsanitize-coverage=bb,no-prune,trace-pc-guard` or `-fsanitize-coverage=no-prune,trace-pc-guard` to cover every edge. However, the fuzzer does not utilize this instrumentation.
 
+What LibFuzzer asserts to be edge coverage is actually a BB coverage, [ColLAFL](https://wcventure.github.io/FuzzingPaper/Paper/SP18_ColLAFL.pdf)
+```
+Given edge coverage, we could of course infer block coverage. In some cases, we could even infer edge coverage from
+block coverage. SanitizerCoverage further removes critical
+edges to secure the latter inference4
+, and claim to support
+edge coverage. But it is just an enhanced version of block
+coverage. Block coverage provides fewer information than
+edge coverage. Critical edge is just one factor that hinders
+inferring edge coverage from block coverage. 
+```
+
 For example
 ``` 
 // sample.c
@@ -244,3 +256,25 @@ void instrument_thunks()
                   );
 }
 ```
+
+* https://nickdesaulniers.github.io/blog/2023/01/27/critical-edge-splitting/
+* https://events.static.linuxfound.org/sites/events/files/slides/AFL%20filesystem%20fuzzing%2C%20Vault%202016_0.pdf
+* https://www.usenix.org/system/files/woot20-paper-fioraldi.pdf
+* https://dl.acm.org/doi/abs/10.1145/3548606.3560602
+* https://www.usenix.org/system/files/sec24fall-prepub-921-schilling.pdf
+* https://rev.ng/downloads/iccst-18-paper.pdf
+* https://www.usenix.org/conference/usenixsecurity23/presentation/yin
+* https://www.usenix.org/system/files/usenixsecurity23-di-bartolomeo.pdf
+* https://mboehme.github.io/paper/ICSE22.pdf
+* https://qbdi.readthedocs.io/en/stable/intro.html
+* https://dl.acm.org/doi/pdf/10.1145/3468264.3473932
+* https://www.usenix.org/system/files/raid2019-wang-jinghan.pdf
+* https://www.ndss-symposium.org/wp-content/uploads/2019/02/ndss2019_04A-2_Aschermann_paper.pdf
+* https://www.usenix.org/system/files/sec19-lyu.pdf
+* https://arxiv.org/pdf/2209.03441
+* https://nebelwelt.net/publications/files/20Oakland.pdf
+* https://users.cs.utah.edu/~snagy/papers/19SP.pdf
+* https://agra.informatik.uni-bremen.de/doc/konf/FDL2022_nbruns.pdf
+* https://users.cs.utah.edu/~snagy/papers/21CCS.pdf
+
+
