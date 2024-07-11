@@ -13,12 +13,12 @@ public:
     OSObject * AMFIcopyClientEntitlement(task_t task, const char* entitlement);
 };
 
-OSObject * IOFuzzClient::copyClientEntitlement( task_t task,const char* entitlement )
+OSObject * IOFuzzClient::copyClientEntitlement( task_t task, const char* entitlement )
 {
     return kOSBooleanTrue;
 }
 
-OSObject * IOFuzzClient::AMFIcopyClientEntitlement( task_t task,const char* entitlement )
+OSObject * IOFuzzClient::AMFIcopyClientEntitlement( task_t task, const char* entitlement )
 {
     return kOSBooleanTrue;
 }
@@ -32,7 +32,7 @@ uint64_t instrumented_thread = UINT_MAX;
 bool do_instrument = false;
 bool do_log = true;
 bool isDeviceOpen = false;
-kcov* coverage_area= NULL;
+kcov* coverage_area = NULL;
 
 static int dev_major;
 static const struct cdevsw
@@ -71,7 +71,7 @@ IOBufferMemoryDescriptor * createSharedMemory(size_t size)
 uint64_t* map_memoryinto_current_task()
 {
     memoryDescriptor = createSharedMemory( sizeof(kcov) + (0x20000 * (sizeof(uintptr_t)) ));
-    if ( !memoryDescriptor ) {
+    if ( memoryDescriptor == NULL ) {
 
         print_message("[PISHI] Failed to create memory descriptor\n");
         return NULL;
@@ -79,7 +79,7 @@ uint64_t* map_memoryinto_current_task()
     
     currnet_task_map = memoryDescriptor->createMappingInTask(current_task(), 0, kIOMapAnywhere);
     
-    if ( !currnet_task_map ) {
+    if ( currnet_task_map == NULL ) {
 
         print_message("[PISHI] Failed to map memory descriptor\n");
         memoryDescriptor->release();
@@ -143,7 +143,7 @@ pishi_ioctl(dev_t dev, unsigned long cmd, caddr_t _data, int fflag, proc_t p)
             }
             
             uint64_t* maped_address =  map_memoryinto_current_task();
-            if ( !maped_address ) {
+            if ( maped_address == NULL ) {
 
                 print_message("[PISHI] PISHI_IOCTL_MAP IOCTL maped_address is NULL\n");
                 break;
@@ -169,7 +169,7 @@ pishi_ioctl(dev_t dev, unsigned long cmd, caddr_t _data, int fflag, proc_t p)
                 break;
             }
             
-            if (!coverage_area) {
+            if ( coverage_area == NULL ) {
 
                 print_message("[PISHI] PISHI_IOCTL_START coverage_area is NULL\n");
                 break;
@@ -312,15 +312,15 @@ void pop_regs() {
 
 void sanitizer_cov_trace_pc(uintptr_t address)
 {
-    if (__improbable(do_instrument)) {
+    if ( __improbable(do_instrument) ) {
         
-        if (__improbable(coverage_area == NULL))
+        if ( __improbable(coverage_area == NULL) )
             return;
         
-        if(__improbable(instrumented_thread == thread_tid(current_thread()))) {
+        if( __improbable(instrumented_thread == thread_tid(current_thread())) ) {
 
             /* The first 64-bit word is the number of subsequent PCs. */
-            if (__probable(coverage_area->kcov_pos < 0x20000)) {
+            if ( __probable(coverage_area->kcov_pos < 0x20000) ) {
 
                 unsigned long pos = coverage_area->kcov_pos;
                 coverage_area->kcov_area[pos] = address;
@@ -332,15 +332,15 @@ void sanitizer_cov_trace_pc(uintptr_t address)
 
 void sanitizer_cov_trace_lr()
 {
-    if (__improbable(do_instrument)) {
+    if ( __improbable(do_instrument) ) {
         
-        if (__improbable(coverage_area == NULL))
+        if ( __improbable(coverage_area == NULL) )
             return;
         
-        if(__improbable(instrumented_thread == thread_tid(current_thread()))) {
+        if( __improbable(instrumented_thread == thread_tid(current_thread())) ) {
 
             /* The first 64-bit word is the number of subsequent PCs. */
-            if (__probable(coverage_area->kcov_pos < 0x20000)) {
+            if ( __probable(coverage_area->kcov_pos < 0x20000) ) {
 
                 unsigned long pos = coverage_area->kcov_pos;
                 /*
@@ -397,22 +397,22 @@ void fuzz_me(uintptr_t* p)
     char k_buffer[0x100] = {0};
     
     error = copyinstr((user_addr_t)*p, k_buffer, sizeof(k_buffer), &len);
-    if (error) {
+    if ( error ) {
         print_message("[PISHI] can't copyinstr\n");
         return;
     }
     
-    if (strlen(k_buffer) > 9)
-        if(k_buffer[0] =='M')
-            if(k_buffer[1] =='E')
-                if(k_buffer[2] =='Y')
-                    if(k_buffer[3] =='S')
-                        if(k_buffer[4] =='A')
-                            if(k_buffer[5] =='M')
-                                if(k_buffer[6] =='6')
-                                    if(k_buffer[7] =='7')
-                                        if(k_buffer[8] =='8')
-                                            if(k_buffer[9] =='9') {
+    if ( strlen(k_buffer) > 9 )
+        if( k_buffer[0] =='M' )
+            if( k_buffer[1] =='E' )
+                if( k_buffer[2] =='Y' )
+                    if( k_buffer[3] =='S' )
+                        if( k_buffer[4] =='A' )
+                            if( k_buffer[5] =='M' )
+                                if( k_buffer[6] =='6' )
+                                    if( k_buffer[7] =='7' )
+                                        if( k_buffer[8] =='8' )
+                                            if( k_buffer[9] =='9' ) {
                                                 printf("boom!\n");
                                                 int* p = (int*)0x41414141;
                                                 *p = 0x42424242;
@@ -428,7 +428,7 @@ void thread_create_dev_callback(void *, wait_result_t)
 {
     IOSleep(1000);
     dev_major = cdevsw_add(-1, &pishi_cdev);
-    if (dev_major < 0) {
+    if ( dev_major < 0 ) {
 
         print_message("[PISHI] failed to allocate major device node\n");
         return ;
@@ -436,12 +436,12 @@ void thread_create_dev_callback(void *, wait_result_t)
     dev_t dev = makedev(dev_major, 0);
     void *node = devfs_make_node_clone(dev, DEVFS_CHAR, UID_ROOT, GID_WHEEL, 0666,
                                        ksancov_dev_clone, PISHI_DEVNODE);
-    if (!node) {
+    if ( node == NULL ) {
 
         print_message("[PISHI] Failed to create device node\n");
     }
     
-    print_message("[PISHI] instrumented_thread %llu, do_instrument %d\n" ,instrumented_thread, do_instrument);
+    print_message("[PISHI] instrumented_thread %llu, do_instrument %d\n", instrumented_thread, do_instrument);
 }
 
 void create_dev_thread(thread_continue_t calllback)
