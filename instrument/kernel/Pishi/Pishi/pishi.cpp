@@ -325,17 +325,18 @@ void pop_regs() {
 void sanitizer_cov_trace_pc(uint16_t kext, uintptr_t address)
 {
     if ( __improbable(do_instrument) ) {
-        
-        if ( __improbable(coverage_area == NULL) )
-            return;
-        
+        /* number of cases we want to reject due to wrong thread id is a lot more than targeted_kext so we compare it first. */
         if( __improbable(instrumented_thread == thread_tid(current_thread())) ) {
-
+            /* 
+                I just added targeted_kext to be able to instument multiple KEXTs at once,
+                instead of build/install/boot for each KEXT. simple benchmark shows it has not that much performance penalty.
+            */
             if ( __probable( (targeted_kext & kext) == kext) ) {
+                if ( __improbable(coverage_area == NULL) )
+                    return;
                 
                 /* The first 64-bit word is the number of subsequent PCs. */
                 if ( __probable(coverage_area->kcov_pos < 0x20000) ) {
-
                     unsigned long pos = coverage_area->kcov_pos;
                     coverage_area->kcov_area[pos] = address;
                     coverage_area->kcov_pos +=1;
@@ -348,21 +349,23 @@ void sanitizer_cov_trace_pc(uint16_t kext, uintptr_t address)
 void sanitizer_cov_trace_lr(uint16_t kext)
 {
     if ( __improbable(do_instrument) ) {
-        
-        if ( __improbable(coverage_area == NULL) )
-            return;
-        
+        /* number of cases we want to reject due to wrong thread id is a lot more than targeted_kext so we compare it first. */
         if( __improbable(instrumented_thread == thread_tid(current_thread())) ) {
-
+            /* 
+                I just added targeted_kext to be able to instument multiple KEXTs at once,
+                instead of build/install/boot for each KEXT. simple benchmark shows it has not that much performance penalty.
+            */
             if ( __probable( (targeted_kext & kext) == kext) ) {
-                
+                if ( __improbable(coverage_area == NULL) )
+                    return;
+
                 /* The first 64-bit word is the number of subsequent PCs. */
                 if ( __probable(coverage_area->kcov_pos < 0x20000) ) {
-                    
                     unsigned long pos = coverage_area->kcov_pos;
                     /*
                      each block represent unique BB.
-                     TODO: 1- Get real BB address. 2- unslide.
+                     TODO: 1- Get real BB address.( from jmp back to orignal_inst+1
+                           2- unslide.
                      */
                     coverage_area->kcov_area[pos] = (uintptr_t)__builtin_return_address(0);
                     coverage_area->kcov_pos +=1;
@@ -377,19 +380,19 @@ void instrument_thunks()
 {
     asm volatile (
                   ".rept " xstr(REPEAT_COUNT_THUNK) "\n"  // Repeat the following block many times
-                  "    STR x30, [sp, #-16]!\n"      // save LR. we can't restore it in pop_regs. as we have jumped here.
+                  "    STR x30, [sp, #-16]!\n"            // save LR. we can't restore it in pop_regs. as we have jumped here.
                   "    bl _push_regs\n"
-                  "    mov x0, #0x0000\n"          // KEXT flag.
-                  "    mov x1, #0x4141\n"           // fix the correct numner when instrumenting as arg0.
-                  "    mov x1, #0x4141\n"
+                  "    mov x0, #0x0000\n"                 // targeted_kext flag.
+                  "    mov x1, #0x4141\n"                 // fix the correct numner when instrumenting as arg0.
+                  "    mov x1, #0x4141\n"                 // place holder for BB address
                   "    mov x1, #0x4141\n"
                   "    mov x1, #0x4141\n"
                   "    bl _sanitizer_cov_trace_pc\n"
                   "    bl _pop_regs\n"
-                  "    LDR x30, [sp], #16\n"        // restore LR
-                  "    nop\n"
-                  "    nop\n"
-                  ".endr\n"                         // End of repetition
+                  "    LDR x30, [sp], #16\n"              // restore LR
+                  "    nop\n"                             // place holder for original inst.
+                  "    nop\n"                             // place holder for jump back
+                  ".endr\n"                               // End of repetition
                   );
 }
 #else
@@ -397,15 +400,15 @@ void instrument_thunks()
 {
     asm volatile (
                   ".rept " xstr(REPEAT_COUNT_THUNK) "\n"  // Repeat the following block many times
-                  "    STR x30, [sp, #-16]!\n"      // save LR. we can't restore it in pop_regs. as we have jumped here.
+                  "    STR x30, [sp, #-16]!\n"            // save LR. we can't restore it in pop_regs. as we have jumped here.
                   "    bl _push_regs\n"
-                  "    mov x0, #0x0000\n"          // KEXT flag.
+                  "    mov x0, #0x0000\n"                 // targeted_kext flag.
                   "    bl _sanitizer_cov_trace_lr\n"
                   "    bl _pop_regs\n"
-                  "    LDR x30, [sp], #16\n"        // restore LR
-                  "    nop\n"
-                  "    nop\n"
-                  ".endr\n"                         // End of repetition
+                  "    LDR x30, [sp], #16\n"              // restore LR
+                  "    nop\n"                             // place holder for original inst.
+                  "    nop\n"                             // place holder for jump back
+                  ".endr\n"                               // End of repetition
                   );
 }
 #endif
