@@ -36,10 +36,10 @@ def generate_assembly_instructions(x64_number):
     # Generate assembly instructions
 
     instructions = []
-    instructions.append("mov x0,#0x{}".format(segments[3]))
-    instructions.append("movk x0,#0x{},LSL #16".format(segments[2]))
-    instructions.append("movk x0,#0x{},LSL #32".format(segments[1]))
-    instructions.append("movk x0,#0x{},LSL #48".format(segments[0]))
+    instructions.append("mov  x1,#0x{}".format(segments[3]))
+    instructions.append("movk x1,#0x{},LSL #16".format(segments[2]))
+    instructions.append("movk x1,#0x{},LSL #32".format(segments[1]))
+    instructions.append("movk x1,#0x{},LSL #48".format(segments[0]))
     return instructions
 
 def assemble_opcode(assembler, address, opcode):
@@ -94,15 +94,15 @@ def clear_address(address, length):
     if code_unit:
         listing.clearCodeUnits(address, address.add(length - 1), False)
 
-class Instruction(GhidraScript):
-    def instrument(self, stub_address, patch_address, original_inst, needs_fix, index):
+class Instruction():
+    def instrument(self, stub_address, patch_address, original_inst, needs_fix, bb_index, kext_index):
 
         #print("patch address: 0x{}".format(str(patch_address)))
         #print("original_opcode  {}".format(str(original_opcode)))
-        print(index)
+        print(bb_index)
 
          # get orignal instruction before patch.
-        jump_back_instruction = "b {}".format("meysam_return_number_" + str(index)) # Change this to your desired instruction
+        jump_back_instruction = "b {}".format("meysam_return_number_" + str(bb_index)) # Change this to your desired instruction
 
         original_opcode = jarray.zeros(INSTRUCTION_SIZE,"b") # it took me one day to find out about jarray.
         print("patch_address {}\n".format(patch_address))
@@ -110,32 +110,35 @@ class Instruction(GhidraScript):
         memory.getBytes(patch_address, original_opcode)
 
         assembler = Assemblers.getAssembler(currentProgram) # type: ignore
-        create_label(stub_address, "meysam_stub_number_" + str(index))
-        create_label(patch_address.add(INSTRUCTION_SIZE), "meysam_return_number_" + str(index))
+        create_label(stub_address, "meysam_stub_number_" + str(bb_index))
+        create_label(patch_address.add(INSTRUCTION_SIZE), "meysam_return_number_" + str(bb_index))
 
         # Patch the BB to jump to out stub_address# label 
-        patched_instruction = "b {}".format("meysam_stub_number_" + str(index)) # Change this to your desired instruction
+        patched_instruction = "b {}".format("meysam_stub_number_" + str(bb_index)) # Change this to your desired instruction
         assemble_opcode(assembler, patch_address, patched_instruction)
 
         # "str x30, [sp, #-0x10]!"
         # "bl push_regs"
         stub_address = stub_address.add(INSTRUCTION_SIZE * 2)
+        
+        # "mov x0, #0x0000\n" // KEXT flag.
+        stub_address = assemble_opcode(assembler, stub_address, "mov x0,#0x{}".format(kext_index))
 
         #fill first arg of sanitizer_cov_trace_pc with address of patched instrction.(before aslr/noslid)
         if USE_UNSLIDE:
             assembly_instructions = generate_assembly_instructions(str(patch_address))
             for inst in assembly_instructions:
                 stub_address = assemble_opcode(assembler, stub_address, str(inst))
-
+            
         # "bl sanitizer_cov_trace_pc"
         # "bl pop_regs"
         # "ldr x30, [sp], #0x10"
         stub_address =  stub_address.add(INSTRUCTION_SIZE * 3)
 
         if needs_fix:
-            # TODO: if needs fix use assemble_opcode, it will disasm/asm function the opcode for us,
             # so we don't need to get our hands dirty.
             # the ghidra assembler generates correct opcode and fix the address 
+            # read MoreInfo.md, we don't instrument this anymore.
             # stub_address = assemble_opcode(assembler, stub_address, original_inst)
             pass
         else:
@@ -157,7 +160,6 @@ def bb_start_address(basic_block):
         r_min = r.getMinAddress()
         start = "0x%s" % str(r_min)
         break
-
     return start
 
 def check_nonrelative(inst):
@@ -244,6 +246,29 @@ def find_thunk(pishi_start_address, pishi_end_address):
             return pointer.add(INSTRUCTION_SIZE)
         pointer = pointer.add(INSTRUCTION_SIZE)
 
+
+
+def kext_index_to_kext_flag(kext_index):
+    if kext_index == 0:
+        return 0
+    if kext_index == 1:
+        return 1
+    if kext_index > 16: # we use one mov instruction, the max immediate values on aarch64 is 16 bit.
+        print("mex number of suported KEXTs")
+        exit(0)
+    else:
+        return  1 << kext_index - 1
+
+def generate_headerfile(kexts):
+    script_directory = os.path.dirname(os.path.abspath(__file__))
+    with open("{}/../fuzz/kext.h".format(script_directory), 'w') as header_file:
+        kext_index = 1
+        for kext in kexts:
+            kext = kext.replace('.', '_')
+            kext = kext.upper()
+            header_file.write("#define {} {}\n".format(kext, kext_index_to_kext_flag(kext_index)))
+            kext_index = kext_index + 1
+
 def main():
     global current_address
     stub_gen = Instruction()
@@ -261,29 +286,40 @@ def main():
 
     print("thunk address {}".format(current_address))
 
-    kext = askString("Which Kext should we use for instrumentation?", "Please enter kext name(e.g com.apple.iokit.IOSurface). if you want to instrument address range( e.g a function) use config.json")
+    input_kext = askString("Which Kexts should we use for instrumentation? if you want to use ranges from config.json, enter config.json", "Please enter kext names(e.g com.apple.iokit.IOSurface).")
+    kexts = input_kext.split()
+    generate_headerfile(kexts)
 
-    start_address, end_address = get_kext(kext)
-    if start_address == None or end_address == None:
-        kext = get_config('instrument_range')
-        start_address = str(kext["start_address"])
-        end_address = str(kext["end_address"])
+    kext_index = 0
+    for kext in kexts:
+        kext_index = kext_index + 1
 
-    print("start_address {}".format(start_address))
-    print("end_address {}".format(end_address))
+        if str(kext) == "config.json":
+            kext = get_config('instrument_range')
+            start_address = str(kext["start_address"])
+            end_address = str(kext["end_address"])
+        else:
+            start_address, end_address = get_kext(kext)
+            if start_address == None or end_address == None:
+                print("could not find {}".format(kext))
+                exit(0) 
 
-    all_basic_blocks = get_basic_blocks(toAddr(start_address), toAddr(end_address)) # type: ignore #all kext for iosurface 
-    if not all_basic_blocks:
-        print("all_basic_blocks is empty check if start_address and end_address is correct.")
-    
-    index = 0
-    for function_blocks in all_basic_blocks:
-        for block in function_blocks:
-            patch_address, original_opcode, needs_fix = find_correct_inst_or_skip_return_original(block)
-            if patch_address == None:
-               continue
-            current_address = stub_gen.instrument(current_address, patch_address, original_opcode, needs_fix, index)
-            index = index +1
+        print("start_address {}".format(start_address))
+        print("end_address {}".format(end_address))
+
+        all_basic_blocks = get_basic_blocks(toAddr(start_address), toAddr(end_address)) # type: ignore #all kext for iosurface 
+        if not all_basic_blocks:
+            print("all_basic_blocks is empty check if start_address and end_address is correct.")
+        
+        bb_index = 0
+        for function_blocks in all_basic_blocks:
+            for block in function_blocks:
+                patch_address, original_opcode, needs_fix = find_correct_inst_or_skip_return_original(block)
+                if patch_address == None:
+                    continue
+                current_address = stub_gen.instrument(current_address, patch_address, original_opcode, needs_fix, bb_index, kext_index_to_kext_flag(kext_index))
+                bb_index = bb_index + 1
+
 
 if __name__ == "__main__":
     main()

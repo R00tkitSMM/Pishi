@@ -33,6 +33,7 @@ bool do_instrument = false;
 bool do_log = true;
 bool isDeviceOpen = false;
 kcov* coverage_area = NULL;
+uint16_t targeted_kext = 0; // to fit in one mov instrction.
 
 static int dev_major;
 static const struct cdevsw
@@ -50,6 +51,15 @@ pishi_cdev = {
     .d_strategy = eno_strat,
     .d_type = 0
 };
+
+void target_kext(uint16_t kext) {
+    targeted_kext =  kext;
+}
+
+void reset_kext() {
+    targeted_kext = 0;
+}
+
 
 void print_message(const char *format, ...)
 {
@@ -134,7 +144,6 @@ pishi_ioctl(dev_t dev, unsigned long cmd, caddr_t _data, int fflag, proc_t p)
     switch (cmd) {
 
         case PISHI_IOCTL_MAP: {
-            
             print_message("[PISHI] PISHI_IOCTL_MAP instrumented_thread %llu do_instrument %d\n", instrumented_thread, do_instrument);
             if( coverage_area ) {
 
@@ -158,7 +167,6 @@ pishi_ioctl(dev_t dev, unsigned long cmd, caddr_t _data, int fflag, proc_t p)
 
             break;
         }
-            
         case PISHI_IOCTL_START: {
             
             print_message("[PISHI] PISHI_IOCTL_START ThreadID %llu do_instrument %d\n", instrumented_thread, do_instrument);
@@ -180,11 +188,15 @@ pishi_ioctl(dev_t dev, unsigned long cmd, caddr_t _data, int fflag, proc_t p)
 
             instrumented_thread = thread_tid(current_thread());
             do_instrument = true;
-
+            
+            uint16_t kext;
+            bcopy(_data, &kext, sizeof(kext));
+            printf("[PISHI] target_kext: %hu",kext);
+            target_kext(kext);
+            
             break;
         }
         case PISHI_IOCTL_UNMAP: {
-
             print_message("[PISHI] PISI_IOCTL_UNMAP ThreadID %llu do_instrument %d\n", instrumented_thread, do_instrument);
             do_instrument = false;
             instrumented_thread = UINT_MAX;
@@ -205,16 +217,16 @@ pishi_ioctl(dev_t dev, unsigned long cmd, caddr_t _data, int fflag, proc_t p)
             break;
         }
         case PISHI_IOCTL_STOP: {
-            
             do_instrument = false;
             instrumented_thread = UINT_MAX;
+            reset_kext();
             print_message("[PISHI] PISI_IOCTL_STOP ThreadID %llu do_instrument %d\n", instrumented_thread, do_instrument);
+
             break;
         }
         case PISHI_IOCTL_TEST: {
-
             print_message("[PISHI] PISI_IOCTL_TEST ThreadID %llu do_instrument %d\n", instrumented_thread, do_instrument);
-            sanitizer_cov_trace_pc(0x41414141);
+            sanitizer_cov_trace_pc(targeted_kext, 0x4141);
             break;
         }
         case PISHI_IOCTL_FUZZ: {
@@ -310,7 +322,7 @@ void pop_regs() {
     );
 }
 
-void sanitizer_cov_trace_pc(uintptr_t address)
+void sanitizer_cov_trace_pc(uint16_t kext, uintptr_t address)
 {
     if ( __improbable(do_instrument) ) {
         
@@ -319,18 +331,21 @@ void sanitizer_cov_trace_pc(uintptr_t address)
         
         if( __improbable(instrumented_thread == thread_tid(current_thread())) ) {
 
-            /* The first 64-bit word is the number of subsequent PCs. */
-            if ( __probable(coverage_area->kcov_pos < 0x20000) ) {
+            if ( __probable( (targeted_kext & kext) == kext) ) {
+                
+                /* The first 64-bit word is the number of subsequent PCs. */
+                if ( __probable(coverage_area->kcov_pos < 0x20000) ) {
 
-                unsigned long pos = coverage_area->kcov_pos;
-                coverage_area->kcov_area[pos] = address;
-                coverage_area->kcov_pos +=1;
-            }
+                    unsigned long pos = coverage_area->kcov_pos;
+                    coverage_area->kcov_area[pos] = address;
+                    coverage_area->kcov_pos +=1;
+                }
+          }
         }
     }
 }
 
-void sanitizer_cov_trace_lr()
+void sanitizer_cov_trace_lr(uint16_t kext)
 {
     if ( __improbable(do_instrument) ) {
         
@@ -339,16 +354,19 @@ void sanitizer_cov_trace_lr()
         
         if( __improbable(instrumented_thread == thread_tid(current_thread())) ) {
 
-            /* The first 64-bit word is the number of subsequent PCs. */
-            if ( __probable(coverage_area->kcov_pos < 0x20000) ) {
-
-                unsigned long pos = coverage_area->kcov_pos;
-                /*
-                    each block represent unique BB.
-                    TODO: 1- Get real BB address. 2- unslide.
-                */
-                coverage_area->kcov_area[pos] = (uintptr_t)__builtin_return_address(0);
-                coverage_area->kcov_pos +=1;
+            if ( __probable( (targeted_kext & kext) == kext) ) {
+                
+                /* The first 64-bit word is the number of subsequent PCs. */
+                if ( __probable(coverage_area->kcov_pos < 0x20000) ) {
+                    
+                    unsigned long pos = coverage_area->kcov_pos;
+                    /*
+                     each block represent unique BB.
+                     TODO: 1- Get real BB address. 2- unslide.
+                     */
+                    coverage_area->kcov_area[pos] = (uintptr_t)__builtin_return_address(0);
+                    coverage_area->kcov_pos +=1;
+                }
             }
         }
     }
@@ -361,10 +379,11 @@ void instrument_thunks()
                   ".rept " xstr(REPEAT_COUNT_THUNK) "\n"  // Repeat the following block many times
                   "    STR x30, [sp, #-16]!\n"      // save LR. we can't restore it in pop_regs. as we have jumped here.
                   "    bl _push_regs\n"
-                  "    mov x0, #0x4141\n"           // fix the correct numner when instrumenting as arg0.
-                  "    mov x0, #0x4141\n"
-                  "    mov x0, #0x4141\n"
-                  "    mov x0, #0x4141\n"
+                  "    mov x0, #0x0000\n"          // KEXT flag.
+                  "    mov x1, #0x4141\n"           // fix the correct numner when instrumenting as arg0.
+                  "    mov x1, #0x4141\n"
+                  "    mov x1, #0x4141\n"
+                  "    mov x1, #0x4141\n"
                   "    bl _sanitizer_cov_trace_pc\n"
                   "    bl _pop_regs\n"
                   "    LDR x30, [sp], #16\n"        // restore LR
@@ -380,6 +399,7 @@ void instrument_thunks()
                   ".rept " xstr(REPEAT_COUNT_THUNK) "\n"  // Repeat the following block many times
                   "    STR x30, [sp, #-16]!\n"      // save LR. we can't restore it in pop_regs. as we have jumped here.
                   "    bl _push_regs\n"
+                  "    mov x0, #0x0000\n"          // KEXT flag.
                   "    bl _sanitizer_cov_trace_lr\n"
                   "    bl _pop_regs\n"
                   "    LDR x30, [sp], #16\n"        // restore LR
@@ -395,7 +415,6 @@ void fuzz_me(uintptr_t* p)
     int error = 0;
     size_t len;
     char k_buffer[0x100] = {0};
-    
     error = copyinstr((user_addr_t)*p, k_buffer, sizeof(k_buffer), &len);
     if ( error ) {
         print_message("[PISHI] can't copyinstr\n");
