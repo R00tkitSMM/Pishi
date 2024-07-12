@@ -382,16 +382,16 @@ void instrument_thunks()
                   ".rept " xstr(REPEAT_COUNT_THUNK) "\n"  // Repeat the following block many times
                   "    STR x30, [sp, #-16]!\n"            // save LR. we can't restore it in pop_regs. as we have jumped here.
                   "    bl _push_regs\n"
-                  "    mov x0, #0x0000\n"                 // targeted_kext flag.
+                  "    mov x0, #0x0000\n"                 // placeholder targeted_kext flag.
                   "    mov x1, #0x4141\n"                 // fix the correct numner when instrumenting as arg0.
-                  "    mov x1, #0x4141\n"                 // place holder for BB address
+                  "    mov x1, #0x4141\n"                 // placeholder for BB address
                   "    mov x1, #0x4141\n"
                   "    mov x1, #0x4141\n"
                   "    bl _sanitizer_cov_trace_pc\n"
                   "    bl _pop_regs\n"
                   "    LDR x30, [sp], #16\n"              // restore LR
-                  "    nop\n"                             // place holder for original inst.
-                  "    nop\n"                             // place holder for jump back
+                  "    nop\n"                             // placeholder for original inst.
+                  "    nop\n"                             // placeholder for jump back
                   ".endr\n"                               // End of repetition
                   );
 }
@@ -402,12 +402,12 @@ void instrument_thunks()
                   ".rept " xstr(REPEAT_COUNT_THUNK) "\n"  // Repeat the following block many times
                   "    STR x30, [sp, #-16]!\n"            // save LR. we can't restore it in pop_regs. as we have jumped here.
                   "    bl _push_regs\n"
-                  "    mov x0, #0x0000\n"                 // targeted_kext flag.
+                  "    mov x0, #0x0000\n"                 // placeholder for targeted_kext flag.
                   "    bl _sanitizer_cov_trace_lr\n"
                   "    bl _pop_regs\n"
                   "    LDR x30, [sp], #16\n"              // restore LR
-                  "    nop\n"                             // place holder for original inst.
-                  "    nop\n"                             // place holder for jump back
+                  "    nop\n"                             // placeholder for original inst.
+                  "    nop\n"                             // placeholder for jump back
                   ".endr\n"                               // End of repetition
                   );
 }
