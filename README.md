@@ -36,3 +36,5 @@ To-do list:
 - [ ] Edge coverage.
 - [ ] Using Virtualization.Framework to speed up sasmple saving/sharing via shared memory over VirtIO.
 - [ ] Refactor/Cleanup the python code.
+- [ ] using M1N1 to instrument in el3
+- [ ] using coresight to instrumet in hardware pike intel PT
