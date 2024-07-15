@@ -257,6 +257,23 @@ void instrument_thunks()
 }
 ```
 
+
+TODO list
+- [X] Port libprotobuf-mutator to macOS
+- [x] Getting BB address in runtine instead of getting it in instrumentation time.
+- [X] Revisit BBs( What other BBs can we instument.)
+- [X] Instument muliple KEXTs and select which one to be activated.
+- [X] To instrument the kernel at the function, file, or folder level. to instrument kernel we have to let Ghidra analyze everything.
+
+- [ ] Implementing fake copyClientEntitlement
+- [ ] Implementing CompareCoverage(memcmp, strcmp,...)
+- [ ] Performance: Using is_instrument_needed in repeated patterns to return before caliing push/pop to safe some cpu cycles!
+- [ ] Edge coverage.
+- [ ] Using Virtualization.Framework to speed up sasmple saving/sharing via shared memory over VirtIO.
+- [ ] Refactor/Cleanup the python code.
+- [ ] using M1N1 to instrument in el3
+- [ ] using coresight to instrumet in hardware pike intel PT
+
 * https://nickdesaulniers.github.io/blog/2023/01/27/critical-edge-splitting/
 * https://events.static.linuxfound.org/sites/events/files/slides/AFL%20filesystem%20fuzzing%2C%20Vault%202016_0.pdf
 * https://www.usenix.org/system/files/woot20-paper-fioraldi.pdf
