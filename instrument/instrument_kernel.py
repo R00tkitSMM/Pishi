@@ -2,28 +2,14 @@
 #@category macOS.kernel
 
 import os
-import json
 import jarray
 import json
-import os
-import subprocess
-import json
-import instrument
 
-from ghidra.program.model.listing import CodeUnit, Instruction
+from ghidra.program.model.listing import Instruction
 from ghidra.program.model.block import BasicBlockModel
 from ghidra.util.task import ConsoleTaskMonitor
-from ghidra.app.script import GhidraScript
 from ghidra.app.plugin.assembler import Assemblers;
 from ghidra.program.model.symbol import SourceType
-from ghidra.program.model.address import Address
-from ghidra.program.model.listing import CodeUnit
-from ghidra.program.model.listing import Listing
-from ghidra.program.flatapi import FlatProgramAPI
-from ghidra.program.model.mem import MemoryBlock
-from ghidra.program.model.address import Address
-from ghidra.program.model.listing import Function
-from ghidra.program.model.symbol import SymbolUtilities
 
 INSTRUCTION_SIZE = 4
 FUNC_ADDRESS = 0
@@ -31,6 +17,9 @@ FUNC_SIZE = 1
 FUNC_OPCODES = 2
 FUNC_NAME = 3
 
+# if USE_UNSLIDE is defined, the instrument will call sanitizer_cov_trace_pc, allowing us to obtain the unslid and correct basic block (BB) address. 
+# also you have to define this in pishi.hpp file.
+USE_UNSLIDE = True
 
 
 def assemble_opcode(assembler, address, opcode):
@@ -61,73 +50,8 @@ def check_nonrelative(inst):
     
     return False
 
-
-def get_kc_functions():
-
-    instrument_functions = []
-
-    listing = currentProgram.getListing() 
-    function_manager = currentProgram.getFunctionManager()
-    functions = None  
-
-    # script_dir = os.path.dirname(os.path.abspath(__file__))
-    # with open("{}/functions.json".format(script_dir)) as f:
-    #     functions = json.load(f)
-
-    kernel_text_start, kernel_text_end = get_kext("com.apple.kernel")
-
-    kc_functions = function_manager.getFunctions(True)
-
-    all_functions = [] 
-
-    for function in kc_functions:
-
-            function_address = function.getEntryPoint()
-
-            if kernel_text_start <= function_address <= kernel_text_end:
-                continue
-
-            ParameterCount = function.getParameterCount()
-            functionBody = function.getBody()
-            functionSize = functionBody.getNumAddresses()
-
-            if (functionSize < INSTRUCTION_SIZE * 3):
-                continue #ignore 2 instrctuon size function one is bti/pacibsp second is b or return.
-
-            opcodes = []
-            instresting = False
-            for instruction in listing.getInstructions(functionBody, True):
-                if "bti" in str(instruction) or "pacibsp" in str(instruction):
-                    instresting = True
-                else:
-                    break
-            
-            if instresting is False:
-                continue
-            
-            opcodes_index = 0
-            for instruction in listing.getInstructions(functionBody, True):
-                opcodes_index = opcodes_index + 1
-                if check_nonrelative(str(instruction)):
-                    if len(opcodes) > 3:
-                        break
-                    memory = currentProgram.getMemory()
-                    original_opcode = jarray.zeros(INSTRUCTION_SIZE,"b") # it took me one day to find out about jarray.
-                    memory.getBytes(function_address.add(INSTRUCTION_SIZE * opcodes_index ), original_opcode)
-                    opcodes.append([opcodes_index, original_opcode.tolist()])
-            
-            instrument_functions.append([str(function_address), str(functionSize), opcodes, function.name])
-    
-    # script_dir = os.path.dirname(os.path.abspath(__file__))
-    # with open("{}/kc_functions.json".format(script_dir), 'w') as f:
-    #     json.dump(instrument_functions, f)
-
-    return instrument_functions
-
-
 def get_kext(kext):
     program = currentProgram
-    listing = program.getListing()
     memory = program.getMemory()
      
     # Check if the file is Mach-O
@@ -157,21 +81,12 @@ def compare_instructions(taged_function, kc_address):
         return True
     return False
 
-        # k  open_nocancel (0xfffffe00074891b8 - 0xfffffe0007249000) = 0x2401b8
-        # kc open_nocancel (0xfffffe0007e791b8 - 0xfffffe0007c39000) = 0x2401b8 
-
-
 def target_function():
- # Get the current program listing
+
     targets = []
-    file = open("/tmp/logend.txt", "w")
     script_dir = os.path.dirname(os.path.abspath(__file__))
     with open("{}/tagged_functions.json".format(script_dir)) as f:
         tagged_functions = json.load(f)
-
-    kc_functions = get_kc_functions()
-    listing = currentProgram.getListing() 
-    script_directory = os.path.dirname(os.path.abspath(__file__))
 
     start_address, end_address = get_kext("com.apple.kernel")
 
@@ -179,11 +94,11 @@ def target_function():
     kc_kernel_end_address  = toAddr(end_address)
     print(kc_kerne_start_address)
     print(kc_kernel_end_address)
+    
+    function_manager = currentProgram.getFunctionManager()
 
     k_start_address = None 
-    tagged_functions_len = len(tagged_functions)
     done = 0
-    found = False
     for taged_function in tagged_functions:
         done = done + 1
 
@@ -191,30 +106,25 @@ def target_function():
             k_start_address = toAddr(taged_function[FUNC_ADDRESS])
             continue
 
-        for kc_function in kc_functions:
-            if int(taged_function[FUNC_SIZE]) == int(kc_function[FUNC_SIZE]):
+        taged_function_address = toAddr(taged_function[FUNC_ADDRESS])
+        k_off = taged_function_address.subtract(k_start_address)
 
-                taged_function_address = toAddr(taged_function[FUNC_ADDRESS])
-                k_off = taged_function_address.subtract(k_start_address)
+        kc_function_address =  kc_kerne_start_address.add(k_off) # if function size if 4 then add next address as function
 
-                kc_function_address = toAddr(kc_function[FUNC_ADDRESS])
-                kc_off = kc_function_address.subtract(kc_kerne_start_address)
+        is_function = function_manager.getFunctionAt(kc_function_address)
+        if is_function:
+            body = is_function.getBody()
+            if body:
+                size_of_function = body.getNumAddresses()
+                if size_of_function == 4:
+                    # in some cases Ghidra splits a function into two, 'pacibsp' and the rest. and we get address of first one but it has zero BB
+                    kc_function_address = kc_function_address.add(INSTRUCTION_SIZE) 
+                create_label(kc_function_address, taged_function[FUNC_NAME])
+                targets.append(kc_function_address)
 
-                if kc_off == k_off and compare_instructions(taged_function, kc_function):
-                    create_label(kc_function_address, taged_function[FUNC_NAME])
-                    #file.write("name: {} k: {} off:{} kc:{} off:{}\n".format(taged_function[FUNC_NAME], taged_function[FUNC_ADDRESS], hex(k_off), str(kc_function_address), hex(kc_off)))
-                    ##file.flush()
-                    targets.append(kc_function_address)
-                    print("{} much to go".format(tagged_functions_len - done))
-                    found = True
-                    break
-        if found is False:
-            print("WTF {}\n".format(str(taged_function[FUNC_NAME])))
-
-    file.close()
+    print("len targets {} ".format(len(targets)))
 
     return targets
-
 
 def get_basic_blocks(targets):
     # Iterate over the functions and print those within the address range
@@ -226,14 +136,6 @@ def get_basic_blocks(targets):
             all_basic_blocks.append(bb_addresses)
             
     return all_basic_blocks
-
-
-
-INSTRUCTION_SIZE = 4
-
-# if USE_UNSLIDE is defined, the instrument will call sanitizer_cov_trace_pc, allowing us to obtain the unslid and correct basic block (BB) address. 
-# also you have to define this in pishi.hpp file.
-USE_UNSLIDE = True
 
 def generate_assembly_instructions(x64_number):
     if not isinstance(x64_number, str) or len(x64_number) > 16:
@@ -292,11 +194,8 @@ def clear_address(address, length):
 class Instruction():
     def instrument(self, stub_address, patch_address, original_inst, needs_fix, bb_index, kext_index):
 
-        #print("patch address: 0x{}".format(str(patch_address)))
-        #print("original_opcode  {}".format(str(original_opcode)))
         print(bb_index)
 
-         # get orignal instruction before patch.
         jump_back_instruction = "b {}".format("meysam_return_number_" + str(bb_index)) # Change this to your desired instruction
 
         original_opcode = jarray.zeros(INSTRUCTION_SIZE,"b") # it took me one day to find out about jarray.
@@ -339,7 +238,6 @@ class Instruction():
         else:
             # write original opcode
             clear_address(stub_address, INSTRUCTION_SIZE)
-            # print("original_opcode{}".format(original_opcode))
             memory.setBytes(stub_address, original_opcode)
             stub_address = stub_address.add(INSTRUCTION_SIZE) 
 
@@ -356,8 +254,6 @@ def bb_start_address(basic_block):
         start = "0x%s" % str(r_min)
         break
     return start
-
-
 
 # find correct inst to patch or skip and return original opcode
 def find_correct_inst_or_skip_return_original(block):
@@ -379,7 +275,6 @@ def find_correct_inst_or_skip_return_original(block):
 
 def get_kext(kext):
     program = currentProgram
-    listing = program.getListing()
     memory = program.getMemory()
      
     # Check if the file is Mach-O
@@ -415,7 +310,6 @@ def find_thunk(pishi_start_address, pishi_end_address):
         pointer = pointer.add(INSTRUCTION_SIZE)
 
 
-
 def kext_index_to_kext_flag(kext_index):
     if kext_index == 0:
         return 0
@@ -428,11 +322,10 @@ def kext_index_to_kext_flag(kext_index):
         return  1 << kext_index - 1
 
 def main():
+
     targets = target_function()
    
-    global current_address
     stub_gen = Instruction()
-    assembler = Assemblers.getAssembler(currentProgram) # type: ignore
 
     pishi_start_address, pishi_end_address = get_kext("Kcov.macOS.Pishi")
     if pishi_start_address == None or pishi_end_address == None:

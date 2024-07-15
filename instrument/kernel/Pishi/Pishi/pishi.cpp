@@ -29,11 +29,11 @@ IOMemoryMap* currnet_task_map = NULL;
 IOBufferMemoryDescriptor* memoryDescriptor = NULL;
 uint64_t instrumented_thread = UINT_MAX;
 
-bool do_instrument = false;
-bool do_log = true;
-bool isDeviceOpen = false;
+bool do_instrument = false; // change to int.
+bool do_log = true;         // change to int.
+bool isDeviceOpen = false;  // change to int.
 kcov* coverage_area = NULL;
-uint16_t targeted_kext = 0; // to fit in one mov instrction.
+uint16_t targeted_kext = 0; // to fit in one mov instruction.
 
 static int dev_major;
 static const struct cdevsw

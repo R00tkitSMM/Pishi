@@ -4,29 +4,7 @@
 import os
 import json
 import jarray
-import json
-import os
 import subprocess
-import json
-import pickle
-
-from ghidra.program.model.listing import FunctionManager
-
-from ghidra.program.model.block import BasicBlockModel
-from ghidra.util.task import ConsoleTaskMonitor
-from ghidra.app.script import GhidraScript
-from ghidra.app.plugin.assembler import Assemblers;
-from ghidra.program.model.symbol import SourceType
-from ghidra.program.model.listing import CodeUnit
-from ghidra.program.model.listing import Listing
-from ghidra.program.flatapi import FlatProgramAPI
-from ghidra.program.model.mem import MemoryBlock
-from ghidra.program.model.address import Address
-from ghidra.program.model.listing import Function
-from ghidra.program.model.symbol import SymbolUtilities
-from ghidra.app.util.demangler import Demangler
-from ghidra.app.util.demangler.gnu import GnuDemangler
-
 
 INSTRUCTION_SIZE = 4
 FUNC_ADDRESS = 0
@@ -59,45 +37,10 @@ def check_nonrelative(inst):
     for i in Instruction:
         if inst.startswith(i):
             return True
-    
     return False
-
-
-def get_dwarfdump(adddress):
-    dSYM_path = "/Users/meysam/project/Pishi/kernels/Kernels/kernel.release.vmapple.dSYM/Contents/Resources/DWARF/kernel.release.vmapple"
-    dwarfdump_command = ["dwarfdump","--lookup", "0x{}".format(str(adddress)), dSYM_path]
-    print(dwarfdump_command)
-    try:
-        result = subprocess.check_output(dwarfdump_command, stderr=subprocess.STDOUT).encode('ascii','ignore')
-        return result.splitlines()
-    except subprocess.CalledProcessError as e:
-        print("An error occurred:\n" + str(e))
-
-
-def get_file(adddress):
-
-    lines = get_dwarfdump(adddress)
-    start_index = 0
-    for line in lines:
-        start_index = start_index + 1
-        if "DW_TAG_subprogram" in line:
-            print(line)
-            break
-
-    output_lines = []
-    for line in lines[start_index:]:
-        # Remove parentheses and split by space
-        cleaned_line = line.replace("(", "").replace(")", "").strip()
-        key_value = cleaned_line.split(" ", 1)  # Split on first space
-        if len(key_value) == 2:
-            output_lines.append([str(key_value[0]), str(key_value[1])])
-
-    print(output_lines)
-
 
 def get_kext(kext):
     program = currentProgram
-    listing = program.getListing()
     memory = program.getMemory()
      
     # Check if the file is Mach-O
@@ -118,6 +61,9 @@ def get_kext(kext):
     return [None, None]
 
 
+# TODO: block list this functions
+# https://github.com/apple-oss-distributions/xnu/blob/main/san/coverage/kcov-blacklist-arm64
+# https://github.com/apple-oss-distributions/xnu/blob/main/san/coverage/kcov-blacklist
 def get_path(pattern):
 
     command = [
@@ -148,7 +94,6 @@ def main():
 
     listing = currentProgram.getListing() 
     function_manager = currentProgram.getFunctionManager()
-    functions = None  
     instrument_functions = []
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -162,7 +107,6 @@ def main():
     instrument_functions.append([str(kernel_text_start), "", "", "kernel.release.vmapple"]) 
     for function in kc_functions:
             function_address = function.getEntryPoint()
-            ParameterCount = function.getParameterCount()
             functionBody = function.getBody()
             functionSize = functionBody.getNumAddresses()
 
@@ -204,8 +148,9 @@ def main():
             instrument_functions.append([str(function_address), str(functionSize), opcodes, function.name])
 
     #   We don't see many functions here because they have been inlined. As a result, DWARF recognizes them, but Ghidra does not.
-    #print(set(map_name_line)-set(comapre))
+    #   print(set(map_name_line)-set(comapre))
     
+    print("instrument_functions len {}".format(len(instrument_functions)))
     with open("{}/tagged_functions.json".format(script_dir), 'w') as f:
         json.dump(instrument_functions, f)
     
