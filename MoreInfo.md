@@ -264,7 +264,7 @@ TODO list
 - [X] Revisit BBs( What other BBs can we instument.)
 - [X] Instument muliple KEXTs and select which one to be activated.
 - [X] To instrument the kernel at the function, file, or folder level. to instrument kernel we have to let Ghidra analyze everything.
-
+- [ ] Instrument KEXT based on class or methods
 - [ ] Implementing fake copyClientEntitlement
 - [ ] Implementing CompareCoverage(memcmp, strcmp,...)
 - [ ] Performance: Using is_instrument_needed in repeated patterns to return before caliing push/pop to safe some cpu cycles!
