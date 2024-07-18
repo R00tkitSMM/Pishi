@@ -163,7 +163,7 @@ def bb_start_address(basic_block):
     return start
 
 def check_nonrelative(inst):
-
+    # TODO: add more instructions https://courses.cs.washington.edu/courses/cse469/19wi/arm64.pdf 
     Instruction = [
     'and',  'ldadd',  'stur',  'mov',
     'add',  'ldr',    'str',   'ldp', 
