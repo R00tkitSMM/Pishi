@@ -28,10 +28,11 @@ def assemble_opcode(assembler, address, opcode):
 
 def check_nonrelative(inst):
 
+    # TODO: add more Instruction.
     Instruction = [
     'and',  'ldadd',  'stur',  'mov',
     'add',  'ldr',    'str',   'ldp', 
-    'stp',   'mul',   'lsl', 
+    'stp',   'mul',   'lsl',   'sub'
     'lsr',  'cmp',    'tst',   'ldur', 
     'orn',  'bic',    'cmn',   'eon',
     'neg',  'adc',    'mvn',   'ana', 
@@ -45,7 +46,7 @@ def check_nonrelative(inst):
     ]
 
     for i in Instruction:
-        if inst.startswith(i):
+        if str(inst).startswith(i):
             return True
     
     return False
@@ -110,20 +111,26 @@ def target_function():
         k_off = taged_function_address.subtract(k_start_address)
 
         kc_function_address =  kc_kerne_start_address.add(k_off) # if function size if 4 then add next address as function
+        kc_function_address_end = kc_function_address.add(int(taged_function[FUNC_SIZE]))
+        pointer = kc_function_address
 
-        is_function = function_manager.getFunctionAt(kc_function_address)
-        if is_function:
-            body = is_function.getBody()
-            if body:
-                size_of_function = body.getNumAddresses()
-                if size_of_function == 4:
-                    # in some cases Ghidra splits a function into two, 'pacibsp' and the rest. and we get address of first one but it has zero BB
-                    kc_function_address = kc_function_address.add(INSTRUCTION_SIZE) 
-                create_label(kc_function_address, taged_function[FUNC_NAME])
-                targets.append(kc_function_address)
+        # ghidra can't correctly find functions, and it splits them to multiple valid/invalid functions/nonfunctions.
+        # so we try to find all fucntuon in our range
+        
+        create_label(kc_function_address, taged_function[FUNC_NAME])
 
+        while pointer < kc_function_address_end:
+            is_function = function_manager.getFunctionAt(pointer)
+            if is_function:
+                functionBody = is_function.getBody()
+                targets.append(pointer)
+                pointer = pointer.add(functionBody.getNumAddresses())
+                print(pointer)
+            else:
+                pointer = pointer.add(INSTRUCTION_SIZE)
+
+    print("len targets {} ".format(done))
     print("len targets {} ".format(len(targets)))
-
     return targets
 
 def get_basic_blocks(targets):
@@ -265,7 +272,7 @@ def find_correct_inst_or_skip_return_original(block):
     bb_addr = toAddr(bb_start_address(block)) # type: ignore
     
     for inst in instructions:
-        if check_nonrelative(str(inst)):
+        if check_nonrelative(inst):
             patch_address = bb_addr.add(index * INSTRUCTION_SIZE)
             original_opcode  = get_opcode_by_address(patch_address)
             return [patch_address, original_opcode, False]
