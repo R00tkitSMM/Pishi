@@ -2,6 +2,38 @@
 ### what do Pishi do
 Pishi only instruments basic blocks (BBs) that contain at least one non-relative instruction. In my analysis, this includes almost every necessary BB. The remaining blocks are those containing only a "B" instruction and its sub-instructions.
 
+* https://developer.arm.com/documentation/ddi0596/2020-12/Base-Instructions?lang=en
+* https://eclecticlight.co/2021/06/21/code-in-arm-assembly-working-with-pointers/
+
+in Arm64 except following instrctions everything else is non-relative including PAC instructions
+Relative instrctions:
+* B and its sub instrctions are PC relative
+* ADR: Form PC-relative address.
+* ADRP: Form PC-relative address to 4KB page. ( but it definitely has one "add" after it.)
+* LDR (literal): Load Register (literal). only one Addressing modes.
+* LDRSW (literal): Load Register Signed Word (literal).
+* PRFM (literal): Prefetch Memory (literal).
+
+Every AArch64 mnemonics can have 3 types of operands. `Immediate, Register, Memory`
+
+Addressing modes:
+```
+[X1] – base register
+[X1,offset] – offset
+[X1,offset]! – pre-indexed
+[X1],offset – post-indexed
+label/(or "literal" as written in developer.arm.com) a – PC relative label.   <<<<------ the only PC-relative  and it's used in LDR
+```
+
+Offset expressions:
+```
+[X1,10] – fixed integer
+[X1,X2] – register
+[X1,X2, LSL 2] – register shifted left by 2
+[X1,W2, UXTW 2] – 32-bit register shifted left
+```
+we can instrument relative instrctions too, but bascily you can find at leat one instrctuon in each and every BB that is NON PC-relative.
+there are some BB that are one "B" instrction size, 
 After checking LibFuzzer with different code bases using the `-fsanitize=address` flag and using Ghidra to inspect the instrumentation, I can confirm that LibFuzzer also does not instrument basic blocks without non-relative instructions.
 You can instrument your code with `-fsanitize-coverage=bb,no-prune,trace-pc-guard` or `-fsanitize-coverage=no-prune,trace-pc-guard` to cover every edge. However, the fuzzer does not utilize this instrumentation.
 

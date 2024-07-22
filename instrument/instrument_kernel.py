@@ -28,21 +28,33 @@ def assemble_opcode(assembler, address, opcode):
 
 def check_nonrelative(inst):
 
-    # TODO: add more Instruction.
+     # TODO: add more Instruction.
+     # the BL, BLR and BR are non relative. but we don't want to instrument them.
+
+     # https://developer.arm.com/documentation/ddi0596/2020-12/Base-Instructions?lang=en
+     # https://eclecticlight.co/2021/06/21/code-in-arm-assembly-working-with-pointers/
+
+     # Relative instrctions:
+     # B and its sub instrctions are PC relative
+     # ADR: Form PC-relative address.
+     # ADRP: Form PC-relative address to 4KB page. ( but it definitely has one "add" after it.)
+     # LDR (literal): Load Register (literal).
+     # LDRSW (literal): Load Register Signed Word (literal).
+     # PRFM (literal): Prefetch Memory (literal).
+ 
     Instruction = [
-    'and',  'ldadd',  'stur',  'mov',
-    'add',  'ldr',    'str',   'ldp', 
-    'stp',   'mul',   'lsl',   'sub'
-    'lsr',  'cmp',    'tst',   'ldur', 
-    'orn',  'bic',    'cmn',   'eon',
-    'neg',  'adc',    'mvn',   'ana', 
-    'eor',  'sbc',    'orr',   'ldset',
-    'ubfx', 'msub',   'udiv',  'cmhs',
-    'xtn',  'fmov',   'sxtw',  'ccmp',
-    'asr',  'ldrb',   'strb',  'ldrh',
-    'strh', 'xtn',    'uxtn',  'sxtw',
-    'sxtb', 'sxth',   'uxth',  'uxtb',
-    'sbfx', 'bfi',    'bfxil'
+    'and',  'ldadd',   'stur',  'mov',
+    'add',   'str',    'ldp',   'bfxil'
+    'stp',   'mul',    'lsl',   'sub'
+    'lsr',   'cmp',    'tst',   'ldur', 
+    'orn',   'bic',    'cmn',   'eon',
+    'neg',   'adc',    'mvn',   'ana', 
+    'eor',   'sbc',    'orr',   'ldset',
+    'ubfx',  'msub',   'udiv',  'cmhs',
+    'xtn',   'fmov',   'sxtw',  'ccmp',
+    'asr',   'strb',   'sbfx',  'bfi',  
+    'strh',  'xtn',    'uxtn',  'sxtw',
+    'sxtb',  'sxth',   'uxth',  'uxtb'
     ]
 
     for i in Instruction:
