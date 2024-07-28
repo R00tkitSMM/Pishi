@@ -181,24 +181,24 @@ def check_nonrelative(inst):
 
  
     Instruction = [
-    'and',  'ldadd',   'stur',  'mov',
-    'add',   'str',    'ldp',   'bfxil'
-    'stp',   'mul',    'lsl',   'sub'
-    'lsr',   'cmp',    'tst',   'ldur', 
-    'orn',   'bic',    'cmn',   'eon',
-    'neg',   'adc',    'mvn',   'ana', 
-    'eor',   'sbc',    'orr',   'ldset',
-    'ubfx',  'msub',   'udiv',  'cmhs',
-    'xtn',   'fmov',   'sxtw',  'ccmp',
-    'asr',   'strb',   'sbfx',  'bfi',  
-    'strh',  'xtn',    'uxtn',  'sxtw',
-    'sxtb',  'sxth',   'uxth',  'uxtb'
-    ]
+            'and',  'ldadd',   'stur',  'mov',
+            'add',   'str',    'ldp',   'bfxil'
+            'stp',   'mul',    'lsl',   'sub',
+            'lsr',   'cmp',    'tst',   'ldur', 
+            'orn',   'bic',    'cmn',   'eon',
+            'neg',   'adc',    'mvn',   'ana', 
+            'eor',   'sbc',    'orr',   'ldset',
+            'ubfx',  'msub',   'udiv',  'cmhs',
+            'xtn',   'fmov',   'sxtw',  'ccmp',
+            'asr',   'strb',   'sbfx',  'bfi',  
+            'strh',  'xtn',    'uxtn',  'sxtw',
+            'sxtb',  'sxth',   'uxth',  'uxtb'
+            ]
 
     for i in Instruction:
         if str(inst).startswith(i):
             return True
-    
+        
     return False
 
 # find correct inst to patch or skip and return original opcode

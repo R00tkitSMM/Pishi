@@ -45,7 +45,7 @@ def check_nonrelative(inst):
     Instruction = [
     'and',  'ldadd',   'stur',  'mov',
     'add',   'str',    'ldp',   'bfxil'
-    'stp',   'mul',    'lsl',   'sub'
+    'stp',   'mul',    'lsl',   'sub',
     'lsr',   'cmp',    'tst',   'ldur', 
     'orn',   'bic',    'cmn',   'eon',
     'neg',   'adc',    'mvn',   'ana', 

@@ -19,20 +19,19 @@ def assemble_opcode(assembler, address, opcode):
 def check_nonrelative(inst):
 
     Instruction = [
-    'and',  'ldadd',  'stur',  'mov',
-    'add',  'ldr',    'str',   'ldp', 
-    'stp',   'mul',   'lsl', 
-    'lsr',  'cmp',    'tst',   'ldur', 
-    'orn',  'bic',    'cmn',   'eon',
-    'neg',  'adc',    'mvn',   'ana', 
-    'eor',  'sbc',    'orr',   'ldset',
-    'ubfx', 'msub',   'udiv',  'cmhs',
-    'xtn',  'fmov',   'sxtw',  'ccmp',
-    'asr',  'ldrb',   'strb',  'ldrh',
-    'strh', 'xtn',    'uxtn',  'sxtw',
-    'sxtb', 'sxth',   'uxth',  'uxtb',
-    'sbfx', 'bfi',    'bfxil'
-    ]
+        'and',  'ldadd',   'stur',  'mov',
+        'add',   'str',    'ldp',   'bfxil'
+        'stp',   'mul',    'lsl',   'sub',
+        'lsr',   'cmp',    'tst',   'ldur', 
+        'orn',   'bic',    'cmn',   'eon',
+        'neg',   'adc',    'mvn',   'ana', 
+        'eor',   'sbc',    'orr',   'ldset',
+        'ubfx',  'msub',   'udiv',  'cmhs',
+        'xtn',   'fmov',   'sxtw',  'ccmp',
+        'asr',   'strb',   'sbfx',  'bfi',  
+        'strh',  'xtn',    'uxtn',  'sxtw',
+        'sxtb',  'sxth',   'uxth',  'uxtb'
+        ]
 
     for i in Instruction:
         if inst.startswith(i):
