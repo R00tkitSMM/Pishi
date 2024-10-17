@@ -8,7 +8,7 @@
   
 3. copy a Kext(e.g IOSurface.kext) from KDK to `Externtions` folder and add
 ```bash
-        <key>OSBundleCompatibleVersion</key>
+        <key>Kcov.macOS.Pishi</key>
         <string>1</string>
 ``` 
 to `IOSurface.kext/Contents/Info.plist` file
