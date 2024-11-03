@@ -10,3 +10,7 @@ compare so other XNU kernel instrumenations methods:
 * hardware-assisted, Arm CoreSight instrumenations is no avabilie in Apple silicon.
 * kernel.kasan.* do not have Coverage Sanitizer.
 * No other public static or dynamic instrumenations methods.
+
+
+A note on security and safety
+Avoid running Pishi on your personal device; instead, use a dedicated research device that you are willing to risk damaging.
