@@ -17,7 +17,7 @@ to `IOSurface.kext/Contents/Info.plist` file
      sudo chmod -R 755 Extensions/
      ```
 5. Inspect and prepare KEXTs
-   - in target: Run the command to inspect and prepare the list of kext for loading in the text environment:
+   - in target OS(where you want to boot instrumented kernel.): Run this command to inspect and prepare the list of kext for loading in the text environment:
      ```bash
      kmutil inspect -V release --no-header | grep -v "SEPHiber" | awk '{print " -b "$1; }' > kexts.txt
      ```
