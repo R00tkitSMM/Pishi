@@ -9,6 +9,7 @@
         <string>1</string>
 ``` 
 to `IOSurface.kext/Contents/Info.plist` file
+
 4. Set permissions
    - Run the following commands in Terminal to set appropriate permissions for the directory Extensions:
      ```bash
