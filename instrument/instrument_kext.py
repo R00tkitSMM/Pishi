@@ -1,7 +1,6 @@
 #@author Meysam
 #@category macOS.kernel
 
-import os
 import json
 import jarray
 import json
